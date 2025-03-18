@@ -5,8 +5,9 @@ import javax.persistence.*;
 
 @Data
 @Entity
-@Table(name = "index_table") // «index» может быть зарезервированным словом
+@Table(name = "index_table") // Используем имя, отличное от "index"
 public class IndexEntity {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -19,6 +20,7 @@ public class IndexEntity {
     @JoinColumn(name = "lemma_id", nullable = false)
     private LemmaEntity lemma;
 
-    @Column(nullable = false)
-    private float rank;
+    // Переименовано, чтобы избежать конфликтов с зарезервированными словами
+    @Column(name = "lemma_rank", nullable = false)
+    private float lemmaRank;
 }
