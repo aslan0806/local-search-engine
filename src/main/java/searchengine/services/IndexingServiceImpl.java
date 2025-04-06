@@ -1,18 +1,14 @@
 package searchengine.services;
 
 import lombok.RequiredArgsConstructor;
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
 import org.springframework.stereotype.Service;
 import searchengine.config.Site;
 import searchengine.config.SitesList;
 import searchengine.model.SiteStatus;
-import searchengine.model.Page;
 import searchengine.model.Site as SiteEntity;
 import searchengine.repositories.PageRepository;
 import searchengine.repositories.SiteRepository;
 
-import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ForkJoinPool;
@@ -25,15 +21,14 @@ public class IndexingServiceImpl implements IndexingService {
     private final SiteRepository siteRepository;
     private final PageRepository pageRepository;
 
-    private boolean indexingRunning = false;
+    private volatile boolean indexingRunning = false;
+    private final List<SiteIndexerTask> activeTasks = Collections.synchronizedList(new ArrayList<>());
+    private ForkJoinPool forkJoinPool;
 
     @Override
     public Map<String, Object> startIndexing() {
         if (indexingRunning) {
-            return Map.of(
-                    "result", false,
-                    "error", "Индексация уже запущена"
-            );
+            return Map.of("result", false, "error", "Индексация уже запущена");
         }
 
         indexingRunning = true;
@@ -42,7 +37,6 @@ public class IndexingServiceImpl implements IndexingService {
             for (Site configSite : sitesList.getSites()) {
                 String url = configSite.getUrl();
 
-                // Удаляем старые записи по этому сайту
                 siteRepository.findAll().stream()
                         .filter(site -> site.getUrl().equals(url))
                         .forEach(site -> {
@@ -50,7 +44,6 @@ public class IndexingServiceImpl implements IndexingService {
                             siteRepository.delete(site);
                         });
 
-                // Создаём новую запись сайта
                 SiteEntity siteEntity = new SiteEntity();
                 siteEntity.setUrl(configSite.getUrl());
                 siteEntity.setName(configSite.getName());
@@ -58,13 +51,41 @@ public class IndexingServiceImpl implements IndexingService {
                 siteEntity.setStatusTime(LocalDateTime.now());
                 siteRepository.save(siteEntity);
 
-                // Запускаем обход сайта через ForkJoin
-                ForkJoinPool pool = new ForkJoinPool();
-                pool.invoke(new SiteIndexerTask(siteEntity, siteRepository, pageRepository, configSite.getUrl()));
+                SiteIndexerTask task = new SiteIndexerTask(siteEntity, siteRepository, pageRepository, url);
+                activeTasks.add(task);
+
+                forkJoinPool = new ForkJoinPool();
+                forkJoinPool.invoke(task);
             }
 
             indexingRunning = false;
         }).start();
+
+        return Map.of("result", true);
+    }
+
+    @Override
+    public Map<String, Object> stopIndexing() {
+        if (!indexingRunning) {
+            return Map.of("result", false, "error", "Индексация не запущена");
+        }
+
+        indexingRunning = false;
+
+        // Прерываем все задачи
+        activeTasks.forEach(SiteIndexerTask::cancel);
+        if (forkJoinPool != null) {
+            forkJoinPool.shutdownNow();
+        }
+
+        siteRepository.findAll().forEach(site -> {
+            if (site.getStatus() == SiteStatus.INDEXING) {
+                site.setStatus(SiteStatus.FAILED);
+                site.setLastError("Индексация остановлена пользователем");
+                site.setStatusTime(LocalDateTime.now());
+                siteRepository.save(site);
+            }
+        });
 
         return Map.of("result", true);
     }

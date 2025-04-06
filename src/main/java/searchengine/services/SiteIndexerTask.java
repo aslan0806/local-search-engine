@@ -21,6 +21,7 @@ public class SiteIndexerTask extends RecursiveAction {
     private final PageRepository pageRepository;
     private final String url;
     private final Set<String> visited = new HashSet<>();
+    private volatile boolean isCancelled = false;
 
     public SiteIndexerTask(Site site, SiteRepository siteRepository, PageRepository pageRepository, String url) {
         this.site = site;
@@ -29,13 +30,19 @@ public class SiteIndexerTask extends RecursiveAction {
         this.url = url;
     }
 
+    public void cancel() {
+        isCancelled = true;
+    }
+
     @Override
     protected void compute() {
-        processPage(url);
+        if (!isCancelled) {
+            processPage(url);
+        }
     }
 
     private void processPage(String link) {
-        if (!visited.add(link)) return;
+        if (isCancelled || !visited.add(link)) return;
 
         try {
             Document doc = Jsoup.connect(link)
@@ -57,18 +64,20 @@ public class SiteIndexerTask extends RecursiveAction {
             siteRepository.save(site);
 
             Elements links = doc.select("a[href]");
-            Set<SiteIndexerTask> tasks = new HashSet<>();
+            Set<SiteIndexerTask> subTasks = new HashSet<>();
 
-            links.forEach(element -> {
+            for (var element : links) {
                 String href = element.absUrl("href");
                 if (href.startsWith(site.getUrl()) && !href.contains("#") && !href.endsWith(".pdf")) {
-                    SiteIndexerTask task = new SiteIndexerTask(site, siteRepository, pageRepository, href);
-                    task.fork();
-                    tasks.add(task);
+                    SiteIndexerTask subTask = new SiteIndexerTask(site, siteRepository, pageRepository, href);
+                    if (!isCancelled) {
+                        subTask.fork();
+                        subTasks.add(subTask);
+                    }
                 }
-            });
+            }
 
-            tasks.forEach(SiteIndexerTask::join);
+            subTasks.forEach(SiteIndexerTask::join);
 
         } catch (IOException e) {
             site.setStatus(SiteStatus.FAILED);
