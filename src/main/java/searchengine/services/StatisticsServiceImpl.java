@@ -2,70 +2,107 @@ package searchengine.services;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import searchengine.dto.statistics.DetailedStatisticsItem;
-import searchengine.dto.statistics.StatisticsData;
-import searchengine.dto.statistics.StatisticsResponse;
-import searchengine.dto.statistics.TotalStatistics;
-import searchengine.model.Site;
+import searchengine.config.Site;
+import searchengine.config.SitesList;
+import searchengine.model.SiteStatus;
+import searchengine.model.SiteEntity;import searchengine.repositories.PageRepository;
 import searchengine.repositories.SiteRepository;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.time.LocalDateTime;
+import java.util.*;
+import java.util.concurrent.ForkJoinPool;
 
 @Service
 @RequiredArgsConstructor
-public class StatisticsServiceImpl implements StatisticsService {
+public class IndexingServiceImpl implements IndexingService {
 
+    private final SitesList sitesList;
     private final SiteRepository siteRepository;
+    private final PageRepository pageRepository;
+
+    private volatile boolean indexingRunning = false;
+    private final List<SiteIndexerTask> activeTasks = Collections.synchronizedList(new ArrayList<>());
+    private ForkJoinPool forkJoinPool;
 
     @Override
-    public StatisticsResponse getStatistics() {
-        List<Site> siteEntities = siteRepository.findAll();
-
-        // Total statistics
-        TotalStatistics total = new TotalStatistics();
-        total.setSites(siteEntities.size());
-        total.setIndexing(true); // Пока заглушка, можно заменить флагом из общего сервиса
-
-        int totalPages = 0;
-        int totalLemmas = 0; // Пока временно, нужно будет доработать при наличии таблицы lemma
-
-        List<DetailedStatisticsItem> detailedItems = new ArrayList<>();
-
-        for (Site site : siteEntities) {
-            DetailedStatisticsItem item = new DetailedStatisticsItem();
-            item.setUrl(site.getUrl());
-            item.setName(site.getName());
-            item.setStatus(site.getStatus().name());
-            item.setStatusTime(site.getStatusTime()
-                    .atZone(java.time.ZoneId.systemDefault())
-                    .toInstant()
-                    .toEpochMilli());
-            item.setError(site.getLastError());
-
-            int pages = site.getPages() != null ? site.getPages().size() : 0;
-            int lemmas = 0; // сюда позже можно внедрить реальный подсчёт из lemmaRepository
-
-            item.setPages(pages);
-            item.setLemmas(lemmas);
-
-            totalPages += pages;
-            totalLemmas += lemmas;
-
-            detailedItems.add(item);
+    public Map<String, Object> startIndexing() {
+        if (indexingRunning) {
+            return Map.of("result", false, "error", "Индексация уже запущена");
         }
 
-        total.setPages(totalPages);
-        total.setLemmas(totalLemmas);
+        indexingRunning = true;
 
-        StatisticsData data = new StatisticsData();
-        data.setTotal(total);
-        data.setDetailed(detailedItems);
+        new Thread(() -> {
+            for (Site configSite : sitesList.getSites()) {
+                String url = configSite.getUrl();
 
-        StatisticsResponse response = new StatisticsResponse();
-        response.setResult(true);
-        response.setStatistics(data);
+                siteRepository.findAll().stream()
+                        .filter(site -> site.getUrl().equals(url))
+                        .forEach(site -> {
+                            pageRepository.deleteAll(site.getPages());
+                            siteRepository.delete(site);
+                        });
 
-        return response;
+                SiteEntity siteEntity = new SiteEntity();
+                siteEntity.setUrl(configSite.getUrl());
+                siteEntity.setName(configSite.getName());
+                siteEntity.setStatus(SiteStatus.INDEXING);
+                siteEntity.setStatusTime(LocalDateTime.now());
+                siteRepository.save(siteEntity);
+
+                SiteIndexerTask task = new SiteIndexerTask(siteEntity, siteRepository, pageRepository, url);
+                activeTasks.add(task);
+
+                forkJoinPool = new ForkJoinPool();
+                forkJoinPool.invoke(task);
+            }
+
+            indexingRunning = false;
+        }).start();
+
+        return Map.of("result", true);
+    }
+
+    @Override
+    public Map<String, Object> stopIndexing() {
+        if (!indexingRunning) {
+            return Map.of("result", false, "error", "Индексация не запущена");
+        }
+
+        indexingRunning = false;
+
+        activeTasks.forEach(SiteIndexerTask::cancel);
+        if (forkJoinPool != null) {
+            forkJoinPool.shutdownNow();
+        }
+
+        siteRepository.findAll().forEach(site -> {
+            if (site.getStatus() == SiteStatus.INDEXING) {
+                site.setStatus(SiteStatus.FAILED);
+                site.setLastError("Индексация остановлена пользователем");
+                site.setStatusTime(LocalDateTime.now());
+                siteRepository.save(site);
+            }
+        });
+
+        return Map.of("result", true);
+    }
+
+    // ✅ Новый метод для /api/indexPage
+    @Override
+    public Map<String, Object> indexPage(String url) {
+        if (!isFromConfiguredSites(url)) {
+            return Map.of("result", false, "error",
+                    "Данная страница находится за пределами сайтов, указанных в конфигурационном файле");
+        }
+
+        // TODO: здесь будет полная реализация
+        return Map.of("result", true);
+    }
+
+    // Вспомогательный метод
+    private boolean isFromConfiguredSites(String url) {
+        return sitesList.getSites().stream()
+                .anyMatch(site -> url.startsWith(site.getUrl()));
     }
 }

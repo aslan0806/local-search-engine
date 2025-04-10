@@ -14,15 +14,19 @@ public class IndexingController {
 
     private final IndexingService indexingService;
 
-    @GetMapping("/startIndexing")
+    @PostMapping("/startIndexing")
     public ResponseEntity<Map<String, Object>> startIndexing() {
-        Map<String, Object> response = indexingService.startIndexing();
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(indexingService.startIndexing());
     }
 
-    @GetMapping("/stopIndexing")
+    @PostMapping("/stopIndexing")
     public ResponseEntity<Map<String, Object>> stopIndexing() {
-        Map<String, Object> response = indexingService.stopIndexing();
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(indexingService.stopIndexing());
+    }
+
+    // ✅ Новый метод
+    @PostMapping("/indexPage")
+    public ResponseEntity<Map<String, Object>> indexPage(@RequestParam String url) {
+        return ResponseEntity.ok(indexingService.indexPage(url));
     }
 }
