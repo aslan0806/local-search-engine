@@ -7,11 +7,16 @@ import org.springframework.stereotype.Service;
 import searchengine.config.Site;
 import searchengine.config.SitesList;
 import searchengine.model.*;
-import searchengine.repositories.*;
+import searchengine.model.SiteEntity;
+import searchengine.repositories.IndexRepository;
+import searchengine.repositories.LemmaRepository;
+import searchengine.repositories.PageRepository;
+import searchengine.repositories.SiteRepository;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
-import java.util.Map;
+import java.util.*;
+import java.util.concurrent.ForkJoinPool;
 
 @Service
 @RequiredArgsConstructor
@@ -25,90 +30,133 @@ public class IndexingServiceImpl implements IndexingService {
     private final LemmaService lemmaService;
 
     private volatile boolean indexingRunning = false;
+    private final List<SiteIndexerTask> activeTasks = Collections.synchronizedList(new ArrayList<>());
+    private ForkJoinPool forkJoinPool;
 
     @Override
     public Map<String, Object> startIndexing() {
-        // уже реализовано ранее
+        if (indexingRunning) {
+            return Map.of("result", false, "error", "Индексация уже запущена");
+        }
+
+        indexingRunning = true;
+
+        new Thread(() -> {
+            for (Site configSite : sitesList.getSites()) {
+                String url = configSite.getUrl();
+
+                siteRepository.findAll().stream()
+                        .filter(site -> site.getUrl().equals(url))
+                        .forEach(site -> {
+                            pageRepository.deleteAll(site.getPages());
+                            siteRepository.delete(site);
+                        });
+
+                SiteEntity siteEntity = new SiteEntity();
+                siteEntity.setUrl(configSite.getUrl());
+                siteEntity.setName(configSite.getName());
+                siteEntity.setStatus(SiteStatus.INDEXING);
+                siteEntity.setStatusTime(LocalDateTime.now());
+                siteRepository.save(siteEntity);
+
+                SiteIndexerTask task = new SiteIndexerTask(siteEntity, siteRepository, pageRepository, url);
+                activeTasks.add(task);
+
+                forkJoinPool = new ForkJoinPool();
+                forkJoinPool.invoke(task);
+            }
+
+            indexingRunning = false;
+        }).start();
+
         return Map.of("result", true);
     }
 
     @Override
     public Map<String, Object> stopIndexing() {
-        // уже реализовано ранее
+        if (!indexingRunning) {
+            return Map.of("result", false, "error", "Индексация не запущена");
+        }
+
+        indexingRunning = false;
+
+        activeTasks.forEach(SiteIndexerTask::cancel);
+        if (forkJoinPool != null) {
+            forkJoinPool.shutdownNow();
+        }
+
+        siteRepository.findAll().forEach(site -> {
+            if (site.getStatus() == SiteStatus.INDEXING) {
+                site.setStatus(SiteStatus.FAILED);
+                site.setLastError("Индексация остановлена пользователем");
+                site.setStatusTime(LocalDateTime.now());
+                siteRepository.save(site);
+            }
+        });
+
         return Map.of("result", true);
     }
 
     @Override
     public Map<String, Object> indexPage(String url) {
-        if (url == null || url.isBlank()) {
-            return Map.of("result", false, "error", "URL не передан");
-        }
-
-        // Проверяем, принадлежит ли URL сайту из конфигурации
-        Site configSite = sitesList.getSites().stream()
+        Optional<Site> optional = sitesList.getSites().stream()
                 .filter(site -> url.startsWith(site.getUrl()))
-                .findFirst()
-                .orElse(null);
+                .findFirst();
 
-        if (configSite == null) {
-            return Map.of("result", false,
-                    "error", "Данная страница находится за пределами сайтов, указанных в конфигурационном файле");
+        if (optional.isEmpty()) {
+            return Map.of("result", false, "error",
+                    "Данная страница находится за пределами сайтов, указанных в конфигурационном файле");
         }
+
+        Site configSite = optional.get();
+
+        SiteEntity siteEntity = siteRepository.findByUrl(configSite.getUrl())
+                .orElseGet(() -> {
+                    SiteEntity newSite = new SiteEntity();
+                    newSite.setUrl(configSite.getUrl());
+                    newSite.setName(configSite.getName());
+                    newSite.setStatus(SiteStatus.INDEXED);
+                    newSite.setStatusTime(LocalDateTime.now());
+                    return siteRepository.save(newSite);
+                });
 
         try {
-            Document doc = Jsoup.connect(url)
-                    .userAgent("HeliontSearchBot")
-                    .referrer("https://google.com")
-                    .get();
+            Document doc = Jsoup.connect(url).get();
 
-            String path = url.replaceFirst(configSite.getUrl(), "");
-            if (path.isEmpty()) path = "/";
+            // Удаляем старую страницу (если есть)
+            Optional<Page> oldPage = pageRepository.findByPathAndSite(url, siteEntity);
+            oldPage.ifPresent(pageRepository::delete);
 
-            // Получаем или создаём сайт в базе
-            searchengine.model.Site siteEntity = siteRepository.findByUrl(configSite.getUrl())
-                    .orElseGet(() -> {
-                        searchengine.model.Site site = new searchengine.model.Site();
-                        site.setUrl(configSite.getUrl());
-                        site.setName(configSite.getName());
-                        site.setStatus(SiteStatus.INDEXED);
-                        site.setStatusTime(LocalDateTime.now());
-                        return siteRepository.save(site);
-                    });
-
-            // Удаляем предыдущую версию страницы
-            pageRepository.deleteByPathAndSite(path, siteEntity);
-
-            // Сохраняем страницу
             Page page = new Page();
             page.setSite(siteEntity);
-            page.setPath(path);
-            page.setCode(doc.connection().response().statusCode());
+            page.setPath(url);
+            page.setCode(200);
             page.setContent(doc.html());
-            pageRepository.save(page);
+            Page savedPage = pageRepository.save(page);
 
-            // Обработка лемм
-            String text = doc.body().text();
-            Map<String, Integer> lemmaMap = lemmaService.getLemmaMap(text);
+            // Лемматизация
+            Map<String, Integer> lemmas = lemmaService.lemmatize(doc.text());
 
-            for (var entry : lemmaMap.entrySet()) {
+            // Обновление таблиц lemma + index
+            for (Map.Entry<String, Integer> entry : lemmas.entrySet()) {
                 String lemmaText = entry.getKey();
                 int count = entry.getValue();
 
                 Lemma lemma = lemmaRepository.findByLemmaAndSite(lemmaText, siteEntity)
                         .orElseGet(() -> {
-                            Lemma l = new Lemma();
-                            l.setSite(siteEntity);
-                            l.setLemma(lemmaText);
-                            l.setFrequency(0);
-                            return l;
+                            Lemma newLemma = new Lemma();
+                            newLemma.setSite(siteEntity);
+                            newLemma.setLemma(lemmaText);
+                            newLemma.setFrequency(0);
+                            return newLemma;
                         });
 
                 lemma.setFrequency(lemma.getFrequency() + 1);
                 lemmaRepository.save(lemma);
 
                 Index index = new Index();
-                index.setPage(page);
                 index.setLemma(lemma);
+                index.setPage(savedPage);
                 index.setRank(count);
                 indexRepository.save(index);
             }
@@ -116,7 +164,12 @@ public class IndexingServiceImpl implements IndexingService {
             return Map.of("result", true);
 
         } catch (IOException e) {
-            return Map.of("result", false, "error", "Ошибка при загрузке страницы: " + e.getMessage());
+            siteEntity.setStatus(SiteStatus.FAILED);
+            siteEntity.setLastError("Ошибка подключения: " + e.getMessage());
+            siteEntity.setStatusTime(LocalDateTime.now());
+            siteRepository.save(siteEntity);
+
+            return Map.of("result", false, "error", "Ошибка при индексации страницы: " + e.getMessage());
         }
     }
 }

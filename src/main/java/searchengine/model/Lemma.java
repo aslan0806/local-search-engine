@@ -5,20 +5,21 @@ import lombok.Setter;
 
 import javax.persistence.*;
 
-@Getter
-@Setter
 @Entity
 @Table(name = "lemma")
+@Getter
+@Setter
 public class Lemma {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private int id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne
     @JoinColumn(name = "site_id", nullable = false)
-    private Site site;
+    private SiteEntity site;
 
-    @Column(nullable = false, length = 255)
+    @Column(nullable = false)
     private String lemma;
 
     @Column(nullable = false)

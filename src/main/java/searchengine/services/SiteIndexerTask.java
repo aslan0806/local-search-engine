@@ -4,7 +4,8 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.select.Elements;
 import searchengine.model.Page;
-import searchengine.model.Site;
+import searchengine.model.SiteEntity;
+import searchengine.model.SiteStatus;
 import searchengine.repositories.PageRepository;
 import searchengine.repositories.SiteRepository;
 
@@ -16,14 +17,14 @@ import java.util.concurrent.RecursiveAction;
 
 public class SiteIndexerTask extends RecursiveAction {
 
-    private final Site site;
+    private final SiteEntity site;
     private final SiteRepository siteRepository;
     private final PageRepository pageRepository;
     private final String url;
     private final Set<String> visited = new HashSet<>();
     private volatile boolean isCancelled = false;
 
-    public SiteIndexerTask(Site site, SiteRepository siteRepository, PageRepository pageRepository, String url) {
+    public SiteIndexerTask(SiteEntity site, SiteRepository siteRepository, PageRepository pageRepository, String url) {
         this.site = site;
         this.siteRepository = siteRepository;
         this.pageRepository = pageRepository;

@@ -2,6 +2,7 @@ package searchengine.model;
 
 import lombok.Getter;
 import lombok.Setter;
+
 import javax.persistence.*;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -25,7 +26,6 @@ public class SiteEntity {
     private String lastError;
 
     private String url;
-
     private String name;
 
     @OneToMany(mappedBy = "site", cascade = CascadeType.ALL, fetch = FetchType.LAZY)

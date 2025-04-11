@@ -5,20 +5,21 @@ import lombok.Setter;
 
 import javax.persistence.*;
 
+@Entity
+@Table(name = "`page_index`") // keyword!
 @Getter
 @Setter
-@Entity
-@Table(name = "index_table") // "index" зарезервировано в MySQL
 public class Index {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private int id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne
     @JoinColumn(name = "page_id", nullable = false)
     private Page page;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne
     @JoinColumn(name = "lemma_id", nullable = false)
     private Lemma lemma;
 

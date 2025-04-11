@@ -5,19 +5,19 @@ import lombok.Setter;
 
 import javax.persistence.*;
 
+@Entity
+@Table(name = "page")
 @Getter
 @Setter
-@Entity
-@Table(name = "page", indexes = @Index(columnList = "path"))
 public class Page {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private int id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne
     @JoinColumn(name = "site_id", nullable = false)
-    private Site site;
+    private SiteEntity site;
 
     @Column(columnDefinition = "TEXT", nullable = false)
     private String path;
