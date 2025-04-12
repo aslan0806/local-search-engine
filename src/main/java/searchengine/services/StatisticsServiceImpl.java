@@ -37,10 +37,11 @@ public class StatisticsServiceImpl implements StatisticsService {
             item.setName(site.getName());
             item.setUrl(site.getUrl());
             item.setStatus(site.getStatus().toString());
-            item.setStatusTime(site.getStatusTime() != null
-                    ? Timestamp.valueOf(site.getStatusTime()).getTime()
-                    : 0);
-
+            item.setStatusTime(
+                    site.getStatusTime() != null
+                            ? Timestamp.valueOf(site.getStatusTime()).getTime()
+                            : 0
+            );
             item.setError(site.getLastError() == null ? "" : site.getLastError());
 
             int pageCount = (int) pageRepository.countBySite(site);
@@ -48,7 +49,6 @@ public class StatisticsServiceImpl implements StatisticsService {
 
             item.setPages(pageCount);
             item.setLemmas(lemmaCount);
-
             totalPages += pageCount;
             totalLemmas += lemmaCount;
 
@@ -63,8 +63,8 @@ public class StatisticsServiceImpl implements StatisticsService {
         data.setDetailed(detailed);
 
         StatisticsResponse response = new StatisticsResponse();
-        response.setStatistics(data);
         response.setResult(true);
+        response.setStatistics(data);
 
         return response;
     }
