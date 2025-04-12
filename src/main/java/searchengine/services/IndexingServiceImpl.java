@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;
 import searchengine.dto.indexing.IndexingResponse;
 import searchengine.model.SiteEntity;
 import searchengine.repositories.SiteRepository;
+import searchengine.services.indexing.IndexingTask;
 
 import java.util.List;
 
@@ -15,41 +16,29 @@ public class IndexingServiceImpl implements IndexingService {
     private final SiteRepository siteRepository;
     private final IndexingTask indexingTask;
 
-    private volatile boolean isIndexing = false;
-
     @Override
     public IndexingResponse startIndexing() {
-        if (isIndexing) {
-            return new IndexingResponse(false, "Индексация уже запущена");
-        }
-
-        isIndexing = true;
-
-        List<SiteEntity> sites = siteRepository.findAll();
-
-        for (SiteEntity site : sites) {
-            // 🔧 Временно хардкодим пути, заменим позже на парсинг сайта
-            List<String> paths = List.of("/", "/news", "/about");
-
-            for (String path : paths) {
-                if (!isIndexing) {
-                    return new IndexingResponse(false, "Индексация остановлена");
-                }
-                indexingTask.indexPage(site, path);
+        IndexingResponse response = new IndexingResponse();
+        try {
+            List<SiteEntity> sites = siteRepository.findAll();
+            for (SiteEntity site : sites) {
+                indexingTask.indexSite(site); // ✅ важно: вызываем метод indexSite
             }
+            response.setResult(true);
+            response.setError(null);
+        } catch (Exception e) {
+            response.setResult(false);
+            response.setError("Ошибка при индексации: " + e.getMessage());
         }
 
-        isIndexing = false;
-        return new IndexingResponse(true, null);
+        return response;
     }
 
     @Override
     public IndexingResponse stopIndexing() {
-        if (!isIndexing) {
-            return new IndexingResponse(false, "Индексация не запущена");
-        }
-
-        isIndexing = false;
-        return new IndexingResponse(true, null);
+        IndexingResponse response = new IndexingResponse();
+        response.setResult(false);
+        response.setError("Остановка индексации пока не реализована");
+        return response;
     }
 }
