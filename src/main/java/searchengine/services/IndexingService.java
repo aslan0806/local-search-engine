@@ -1,9 +1,8 @@
 package searchengine.services;
 
-import java.util.Map;
+import searchengine.dto.indexing.IndexingResponse;
 
 public interface IndexingService {
-    Map<String, Object> startIndexing();
-    Map<String, Object> stopIndexing();
-    Map<String, Object> indexPage(String url); // ✅ добавлено
+    IndexingResponse startIndexing();
+    IndexingResponse stopIndexing();
 }
