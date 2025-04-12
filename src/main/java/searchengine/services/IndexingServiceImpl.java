@@ -4,62 +4,52 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import searchengine.dto.indexing.IndexingResponse;
 import searchengine.model.SiteEntity;
-import searchengine.model.StatusType;
 import searchengine.repositories.SiteRepository;
 
-import java.time.LocalDateTime;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 @Service
 @RequiredArgsConstructor
 public class IndexingServiceImpl implements IndexingService {
 
     private final SiteRepository siteRepository;
-    private final AtomicBoolean indexingRunning = new AtomicBoolean(false);
+    private final IndexingTask indexingTask;
+
+    private volatile boolean isIndexing = false;
 
     @Override
     public IndexingResponse startIndexing() {
-        if (indexingRunning.get()) {
+        if (isIndexing) {
             return new IndexingResponse(false, "Индексация уже запущена");
         }
 
-        indexingRunning.set(true);
-        new Thread(this::runIndexing).start();
+        isIndexing = true;
 
-        return new IndexingResponse(true, null);
-    }
-
-    private void runIndexing() {
         List<SiteEntity> sites = siteRepository.findAll();
+
         for (SiteEntity site : sites) {
-            site.setStatus(StatusType.INDEXING);
-            site.setStatusTime(LocalDateTime.now());
-            siteRepository.save(site);
+            // 🔧 Временно хардкодим пути, заменим позже на парсинг сайта
+            List<String> paths = List.of("/", "/news", "/about");
 
-            try {
-                // Здесь позже будет реальный обход страниц
-                Thread.sleep(2000); // Симулируем задержку индексации
-                site.setStatus(StatusType.INDEXED);
-            } catch (InterruptedException e) {
-                site.setStatus(StatusType.FAILED);
-                site.setLastError("Индексация прервана: " + e.getMessage());
+            for (String path : paths) {
+                if (!isIndexing) {
+                    return new IndexingResponse(false, "Индексация остановлена");
+                }
+                indexingTask.indexPage(site, path);
             }
-
-            site.setStatusTime(LocalDateTime.now());
-            siteRepository.save(site);
         }
 
-        indexingRunning.set(false);
+        isIndexing = false;
+        return new IndexingResponse(true, null);
     }
 
     @Override
     public IndexingResponse stopIndexing() {
-        if (!indexingRunning.get()) {
+        if (!isIndexing) {
             return new IndexingResponse(false, "Индексация не запущена");
         }
 
-        indexingRunning.set(false);
+        isIndexing = false;
         return new IndexingResponse(true, null);
     }
 }
