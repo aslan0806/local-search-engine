@@ -7,5 +7,5 @@ import searchengine.model.SiteEntity;
 
 @Repository
 public interface LemmaRepository extends JpaRepository<Lemma, Integer> {
-    int countBySite(SiteEntity site);
+    long countBySite(SiteEntity site);
 }

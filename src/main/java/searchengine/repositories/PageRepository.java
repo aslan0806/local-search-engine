@@ -7,5 +7,5 @@ import searchengine.model.SiteEntity;
 
 @Repository
 public interface PageRepository extends JpaRepository<Page, Integer> {
-    int countBySite(SiteEntity site);
+    long countBySite(SiteEntity site);
 }

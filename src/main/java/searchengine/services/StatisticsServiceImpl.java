@@ -8,7 +8,7 @@ import searchengine.repositories.LemmaRepository;
 import searchengine.repositories.PageRepository;
 import searchengine.repositories.SiteRepository;
 
-import java.time.ZoneId;
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -22,47 +22,50 @@ public class StatisticsServiceImpl implements StatisticsService {
 
     @Override
     public StatisticsResponse getStatistics() {
-        StatisticsResponse response = new StatisticsResponse();
-        StatisticsData data = new StatisticsData();
-
-        // 1. Общая статистика
-        TotalStatistics total = new TotalStatistics();
-        total.setSites((int) siteRepository.count());
-        total.setPages((int) pageRepository.count());
-        total.setLemmas((int) lemmaRepository.count());
-        total.setIndexing(true); // Можно заменить на флаг, если есть
-
-        // 2. Детальная статистика по каждому сайту
-        List<DetailedStatisticsItem> detailed = new ArrayList<>();
         List<SiteEntity> sites = siteRepository.findAll();
+
+        TotalStatistics total = new TotalStatistics();
+        total.setSites(sites.size());
+        total.setIndexing(true);
+
+        List<DetailedStatisticsItem> detailed = new ArrayList<>();
+        int totalPages = 0;
+        int totalLemmas = 0;
 
         for (SiteEntity site : sites) {
             DetailedStatisticsItem item = new DetailedStatisticsItem();
             item.setName(site.getName());
             item.setUrl(site.getUrl());
-            item.setStatus(site.getStatus().name());
-
-            if (site.getStatusTime() != null) {
-                long millis = site.getStatusTime()
-                        .atZone(ZoneId.systemDefault())
-                        .toInstant()
-                        .toEpochMilli();
-                item.setStatusTime(millis);
-            } else {
-                item.setStatusTime(System.currentTimeMillis());
-            }
+            item.setStatus(site.getStatus().toString());
+            item.setStatusTime(site.getStatusTime() != null
+                    ? Timestamp.valueOf(site.getStatusTime()).getTime()
+                    : 0);
 
             item.setError(site.getLastError() == null ? "" : site.getLastError());
-            item.setPages(pageRepository.countBySite(site));
-            item.setLemmas(lemmaRepository.countBySite(site));
+
+            int pageCount = (int) pageRepository.countBySite(site);
+            int lemmaCount = (int) lemmaRepository.countBySite(site);
+
+            item.setPages(pageCount);
+            item.setLemmas(lemmaCount);
+
+            totalPages += pageCount;
+            totalLemmas += lemmaCount;
+
             detailed.add(item);
         }
 
+        total.setPages(totalPages);
+        total.setLemmas(totalLemmas);
+
+        StatisticsData data = new StatisticsData();
         data.setTotal(total);
         data.setDetailed(detailed);
 
+        StatisticsResponse response = new StatisticsResponse();
         response.setStatistics(data);
         response.setResult(true);
+
         return response;
     }
 }
