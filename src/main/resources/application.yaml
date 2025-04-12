@@ -19,3 +19,7 @@ indexing-settings:
       name: Skillbox
     - url: https://www.playback.ru
       name: PlayBack.Ru
+    - url: https://example.com
+      name: ExampleSite
+    - url: https://another.com
+      name: AnotherAnotherSite

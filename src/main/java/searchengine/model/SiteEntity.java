@@ -5,7 +5,6 @@ import lombok.Setter;
 
 import javax.persistence.*;
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Entity
 @Table(name = "site")
@@ -17,17 +16,15 @@ public class SiteEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private int id;
 
-    @Enumerated(EnumType.STRING)
-    private SiteStatus status;
-
-    private LocalDateTime statusTime;
-
-    @Column(columnDefinition = "TEXT")
-    private String lastError;
-
     private String url;
     private String name;
 
-    @OneToMany(mappedBy = "site", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    private List<Page> pages;
+    @Enumerated(EnumType.STRING)
+    private StatusType status;
+
+    @Column(name = "status_time")
+    private LocalDateTime statusTime;
+
+    @Column(name = "last_error", columnDefinition = "TEXT")
+    private String lastError;
 }
