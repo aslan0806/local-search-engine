@@ -5,7 +5,7 @@ import org.springframework.stereotype.Service;
 import searchengine.dto.indexing.IndexingResponse;
 import searchengine.model.SiteEntity;
 import searchengine.repositories.SiteRepository;
-import searchengine.services.indexing.IndexingTask;
+import searchengine.services.indexing.SiteCrawler;
 
 import java.util.List;
 
@@ -14,15 +14,15 @@ import java.util.List;
 public class IndexingServiceImpl implements IndexingService {
 
     private final SiteRepository siteRepository;
-    private final IndexingTask indexingTask;
+    private final SiteCrawler siteCrawler;
 
     @Override
     public IndexingResponse startIndexing() {
         List<SiteEntity> sites = siteRepository.findAll();
 
         for (SiteEntity site : sites) {
-            System.out.println("🔎 Индексация сайта: " + site.getUrl()); // ✅ site.getUrl() работает
-            indexingTask.indexSite(site);
+            siteCrawler.clearVisited(); // очищаем перед каждым сайтом
+            siteCrawler.crawl(site, "/");
         }
 
         return new IndexingResponse(true, null);
@@ -30,7 +30,6 @@ public class IndexingServiceImpl implements IndexingService {
 
     @Override
     public IndexingResponse stopIndexing() {
-        // Пока заглушка
         return new IndexingResponse(false, "Остановка пока не реализована");
     }
 }

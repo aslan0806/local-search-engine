@@ -17,40 +17,44 @@ import java.util.Set;
 public class SiteCrawler {
 
     private final IndexingTask indexingTask;
-
     private final Set<String> visited = new HashSet<>();
 
-    public void crawl(SiteEntity site) {
-        crawlPage(site, site.getUrl());
-    }
+    public void crawl(SiteEntity site, String path) {
+        String fullUrl = site.getUrl() + path;
 
-    private void crawlPage(SiteEntity site, String url) {
-        if (visited.contains(url)) return;
-        visited.add(url);
+        if (visited.contains(fullUrl)) {
+            return;
+        }
+
+        visited.add(fullUrl);
 
         try {
-            indexingTask.indexPage(url, site); // 🔥 Индексируем страницу
-            Document doc = Jsoup.connect(url).get();
+            Document doc = Jsoup.connect(fullUrl).get();
+
+            indexingTask.indexPage(site, path); // ✅ индексируем эту страницу
+
             Elements links = doc.select("a[href]");
-
             for (Element link : links) {
-                String absUrl = link.absUrl("href");
+                String href = link.absUrl("href");
 
-                if (absUrl.startsWith(site.getUrl()) && isSameDomain(url, absUrl)) {
-                    crawlPage(site, absUrl);
+                // фильтруем только внутренние ссылки
+                if (href.startsWith(site.getUrl())) {
+                    String relativePath = href.replace(site.getUrl(), "");
+                    if (relativePath.isEmpty()) {
+                        relativePath = "/";
+                    }
+
+                    // рекурсивно обходим
+                    crawl(site, relativePath);
                 }
             }
 
         } catch (IOException e) {
-            System.out.println("⚠️ Ошибка при обходе: " + url + " — " + e.getMessage());
+            System.out.println("⚠️ Ошибка при обходе: " + fullUrl);
         }
     }
 
-    private boolean isSameDomain(String baseUrl, String newUrl) {
-        try {
-            return new java.net.URL(baseUrl).getHost().equals(new java.net.URL(newUrl).getHost());
-        } catch (Exception e) {
-            return false;
-        }
+    public void clearVisited() {
+        visited.clear();
     }
 }
