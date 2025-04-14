@@ -18,27 +18,19 @@ public class IndexingServiceImpl implements IndexingService {
 
     @Override
     public IndexingResponse startIndexing() {
-        IndexingResponse response = new IndexingResponse();
-        try {
-            List<SiteEntity> sites = siteRepository.findAll();
-            for (SiteEntity site : sites) {
-                indexingTask.indexSite(site); // ✅ важно: вызываем метод indexSite
-            }
-            response.setResult(true);
-            response.setError(null);
-        } catch (Exception e) {
-            response.setResult(false);
-            response.setError("Ошибка при индексации: " + e.getMessage());
+        List<SiteEntity> sites = siteRepository.findAll();
+
+        for (SiteEntity site : sites) {
+            System.out.println("🔎 Индексация сайта: " + site.getUrl()); // ✅ site.getUrl() работает
+            indexingTask.indexSite(site);
         }
 
-        return response;
+        return new IndexingResponse(true, null);
     }
 
     @Override
     public IndexingResponse stopIndexing() {
-        IndexingResponse response = new IndexingResponse();
-        response.setResult(false);
-        response.setError("Остановка индексации пока не реализована");
-        return response;
+        // Пока заглушка
+        return new IndexingResponse(false, "Остановка пока не реализована");
     }
 }
