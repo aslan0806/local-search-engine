@@ -8,7 +8,6 @@ import org.jsoup.select.Elements;
 import org.springframework.stereotype.Component;
 import searchengine.model.SiteEntity;
 
-import java.io.IOException;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -17,44 +16,41 @@ import java.util.Set;
 public class SiteCrawler {
 
     private final IndexingTask indexingTask;
+
     private final Set<String> visited = new HashSet<>();
 
     public void crawl(SiteEntity site, String path) {
-        String fullUrl = site.getUrl() + path;
-
-        if (visited.contains(fullUrl)) {
+        if (visited.contains(path)) {
             return;
         }
 
-        visited.add(fullUrl);
+        visited.add(path);
+        indexingTask.indexPage(site, path);
 
         try {
+            String fullUrl = site.getUrl() + path;
             Document doc = Jsoup.connect(fullUrl).get();
-
-            indexingTask.indexPage(site, path); // ✅ индексируем эту страницу
-
             Elements links = doc.select("a[href]");
+
             for (Element link : links) {
-                String href = link.absUrl("href");
-
-                // фильтруем только внутренние ссылки
+                String href = link.attr("abs:href"); // абсолютный путь
                 if (href.startsWith(site.getUrl())) {
-                    String relativePath = href.replace(site.getUrl(), "");
-                    if (relativePath.isEmpty()) {
-                        relativePath = "/";
+                    String nextPath = href.replace(site.getUrl(), "");
+                    if (isValidPath(nextPath)) {
+                        crawl(site, nextPath);
                     }
-
-                    // рекурсивно обходим
-                    crawl(site, relativePath);
                 }
             }
 
-        } catch (IOException e) {
-            System.out.println("⚠️ Ошибка при обходе: " + fullUrl);
+        } catch (Exception e) {
+            System.out.println("⚠️ Ошибка при обходе страницы: " + path);
         }
     }
 
-    public void clearVisited() {
-        visited.clear();
+    private boolean isValidPath(String path) {
+        return path.startsWith("/") &&
+                !path.contains("#") &&
+                !path.contains("?") &&
+                !path.matches(".*\\.(jpg|jpeg|png|gif|css|js|svg|ico)$");
     }
 }
