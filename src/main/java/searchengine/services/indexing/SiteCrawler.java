@@ -20,32 +20,37 @@ public class SiteCrawler {
 
     private final Set<String> visited = new HashSet<>();
 
-    public void crawl(String url, SiteEntity site) {
-        if (visited.contains(url) || !url.startsWith(site.getUrl())) {
-            return;
-        }
+    public void crawl(SiteEntity site) {
+        crawlPage(site, site.getUrl());
+    }
 
+    private void crawlPage(SiteEntity site, String url) {
+        if (visited.contains(url)) return;
         visited.add(url);
 
         try {
-            // Загрузка и индексация
-            indexingTask.indexPage(url, site);
-
-            // Парсим HTML
+            indexingTask.indexPage(url, site); // 🔥 Индексируем страницу
             Document doc = Jsoup.connect(url).get();
             Elements links = doc.select("a[href]");
 
             for (Element link : links) {
-                String href = link.absUrl("href");
+                String absUrl = link.absUrl("href");
 
-                // Фильтрация: только внутренние ссылки
-                if (href.startsWith(site.getUrl()) && !href.contains("#") && !href.endsWith(".pdf") && !href.endsWith(".jpg")) {
-                    crawl(href, site); // рекурсия
+                if (absUrl.startsWith(site.getUrl()) && isSameDomain(url, absUrl)) {
+                    crawlPage(site, absUrl);
                 }
             }
 
         } catch (IOException e) {
-            System.out.println("❌ Ошибка обхода страницы: " + url + " - " + e.getMessage());
+            System.out.println("⚠️ Ошибка при обходе: " + url + " — " + e.getMessage());
+        }
+    }
+
+    private boolean isSameDomain(String baseUrl, String newUrl) {
+        try {
+            return new java.net.URL(baseUrl).getHost().equals(new java.net.URL(newUrl).getHost());
+        } catch (Exception e) {
+            return false;
         }
     }
 }
