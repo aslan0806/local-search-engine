@@ -11,7 +11,6 @@ import searchengine.repositories.LemmaRepository;
 import searchengine.repositories.PageRepository;
 import searchengine.services.LemmaService;
 
-import java.io.IOException;
 import java.util.Map;
 
 @Component
@@ -24,15 +23,14 @@ public class IndexingTask {
     private final LemmaService lemmaService;
 
     @Transactional
-    public void indexPage(SiteEntity site, String path) {
+    public void indexPage(String url, SiteEntity site) {
         try {
-            String fullUrl = site.getUrl() + path;
-            Document doc = Jsoup.connect(fullUrl).get();
+            Document doc = Jsoup.connect(url).get();
             String html = doc.outerHtml();
 
             Page page = new Page();
             page.setSite(site);
-            page.setPath(path);
+            page.setPath(url.replace(site.getUrl(), ""));
             page.setCode(200);
             page.setContent(html);
             pageRepository.save(page);
@@ -62,10 +60,9 @@ public class IndexingTask {
                 indexRepository.save(index);
             }
 
-            System.out.println("✅ Индексирована страница: " + fullUrl);
-
-        } catch (IOException e) {
-            System.out.println("❌ Ошибка при индексации страницы: " + site.getUrl() + path);
+        } catch (Exception e) {
+            System.out.println("❌ Ошибка при индексации страницы: " + url);
+            e.printStackTrace();
         }
     }
 }

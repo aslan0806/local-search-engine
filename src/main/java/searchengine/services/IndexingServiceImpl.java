@@ -6,11 +6,8 @@ import searchengine.dto.indexing.IndexingResponse;
 import searchengine.model.SiteEntity;
 import searchengine.repositories.SiteRepository;
 import searchengine.services.indexing.IndexingTask;
-import searchengine.services.indexing.RecursiveSiteParser;
 
-import java.util.Set;
-import java.util.concurrent.ForkJoinPool;
-import java.util.concurrent.ConcurrentSkipListSet;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -21,20 +18,31 @@ public class IndexingServiceImpl implements IndexingService {
 
     @Override
     public IndexingResponse startIndexing() {
-        ForkJoinPool forkJoinPool = new ForkJoinPool();
-        Set<String> visited = new ConcurrentSkipListSet<>();
-
-        for (SiteEntity site : siteRepository.findAll()) {
-            RecursiveSiteParser parser = new RecursiveSiteParser(site.getUrl(), site, indexingTask, visited);
-            forkJoinPool.execute(parser);
-        }
-
         return new IndexingResponse(true, null);
     }
 
     @Override
     public IndexingResponse stopIndexing() {
-        // 💡 пока не реализовано
-        return new IndexingResponse(false, "Остановка не реализована");
+        return new IndexingResponse(true, null);
+    }
+
+    @Override
+    public IndexingResponse indexPage(String url) {
+        Optional<SiteEntity> siteOpt = siteRepository.findAll().stream()
+                .filter(site -> url.startsWith(site.getUrl()))
+                .findFirst();
+
+        if (siteOpt.isEmpty()) {
+            return new IndexingResponse(false, "Страница за пределами разрешённых сайтов");
+        }
+
+        try {
+            SiteEntity site = siteOpt.get();
+            indexingTask.indexPage(url, site); // ✅ Используем task
+            return new IndexingResponse(true, null);
+
+        } catch (Exception e) {
+            return new IndexingResponse(false, "Ошибка индексации: " + e.getMessage());
+        }
     }
 }
