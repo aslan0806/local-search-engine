@@ -8,6 +8,7 @@ import searchengine.model.Page;
 import searchengine.model.SiteEntity;
 import searchengine.repositories.PageRepository;
 import searchengine.repositories.SiteRepository;
+import searchengine.services.IndexingService;
 
 import java.io.IOException;
 import java.util.List;
