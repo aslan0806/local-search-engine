@@ -5,24 +5,28 @@ import org.springframework.stereotype.Service;
 import searchengine.dto.indexing.IndexingResponse;
 import searchengine.model.SiteEntity;
 import searchengine.repositories.SiteRepository;
-import searchengine.services.indexing.SiteCrawler;
+import searchengine.services.indexing.IndexingTask;
+import searchengine.services.indexing.RecursiveSiteParser;
 
-import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.ConcurrentSkipListSet;
 
 @Service
 @RequiredArgsConstructor
 public class IndexingServiceImpl implements IndexingService {
 
     private final SiteRepository siteRepository;
-    private final SiteCrawler siteCrawler;
+    private final IndexingTask indexingTask;
 
     @Override
     public IndexingResponse startIndexing() {
-        List<SiteEntity> sites = siteRepository.findAll();
+        ForkJoinPool forkJoinPool = new ForkJoinPool();
+        Set<String> visited = new ConcurrentSkipListSet<>();
 
-        for (SiteEntity site : sites) {
-            siteCrawler.clearVisited(); // очищаем перед каждым сайтом
-            siteCrawler.crawl(site, "/");
+        for (SiteEntity site : siteRepository.findAll()) {
+            RecursiveSiteParser parser = new RecursiveSiteParser(site.getUrl(), site, indexingTask, visited);
+            forkJoinPool.execute(parser);
         }
 
         return new IndexingResponse(true, null);
@@ -30,6 +34,7 @@ public class IndexingServiceImpl implements IndexingService {
 
     @Override
     public IndexingResponse stopIndexing() {
-        return new IndexingResponse(false, "Остановка пока не реализована");
+        // 💡 пока не реализовано
+        return new IndexingResponse(false, "Остановка не реализована");
     }
 }
