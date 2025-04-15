@@ -17,40 +17,41 @@ public class SiteCrawler {
 
     private final IndexingTask indexingTask;
 
-    private final Set<String> visited = new HashSet<>();
+    private final Set<String> visitedUrls = new HashSet<>();
 
-    public void crawl(SiteEntity site, String path) {
-        if (visited.contains(path)) {
-            return;
-        }
-
-        visited.add(path);
-        indexingTask.indexPage(site, path);
+    public void crawl(String url, SiteEntity site) {
+        if (visitedUrls.contains(url)) return;
+        visitedUrls.add(url);
 
         try {
-            String fullUrl = site.getUrl() + path;
-            Document doc = Jsoup.connect(fullUrl).get();
-            Elements links = doc.select("a[href]");
+            // ⬇️ Загрузка страницы
+            Document doc = Jsoup.connect(url).get();
 
+            // 🔤 Индексация текущей страницы
+            indexingTask.indexPage(url, site);
+
+            // 🔗 Сбор всех ссылок
+            Elements links = doc.select("a[href]");
             for (Element link : links) {
-                String href = link.attr("abs:href"); // абсолютный путь
-                if (href.startsWith(site.getUrl())) {
-                    String nextPath = href.replace(site.getUrl(), "");
-                    if (isValidPath(nextPath)) {
-                        crawl(site, nextPath);
-                    }
+                String href = link.attr("abs:href");
+
+                // ✅ Фильтрация только внутренних страниц
+                if (href.startsWith(site.getUrl()) &&
+                        !href.contains("#") &&
+                        !href.endsWith(".pdf") &&
+                        !href.endsWith(".jpg") &&
+                        !href.endsWith(".png") &&
+                        !href.endsWith(".jpeg")) {
+                    crawl(href, site); // 🔁 Рекурсивный вызов
                 }
             }
 
         } catch (Exception e) {
-            System.out.println("⚠️ Ошибка при обходе страницы: " + path);
+            System.out.println("❌ Ошибка при обходе " + url + ": " + e.getMessage());
         }
     }
 
-    private boolean isValidPath(String path) {
-        return path.startsWith("/") &&
-                !path.contains("#") &&
-                !path.contains("?") &&
-                !path.matches(".*\\.(jpg|jpeg|png|gif|css|js|svg|ico)$");
+    public void clearVisited() {
+        visitedUrls.clear(); // 🔄 сброс между сайтами
     }
 }
