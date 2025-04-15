@@ -1,6 +1,7 @@
 package searchengine.services;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import searchengine.dto.indexing.IndexingResponse;
 import searchengine.model.SiteEntity;
@@ -27,7 +28,13 @@ public class IndexingServiceImpl implements IndexingService {
         }
 
         isIndexingRunning = true;
+        runIndexingAsync(); // 🔁 Запускаем в отдельном потоке
 
+        return new IndexingResponse(true, null);
+    }
+
+    @Async
+    public void runIndexingAsync() {
         List<SiteEntity> sites = siteRepository.findAll();
 
         for (SiteEntity site : sites) {
@@ -41,14 +48,12 @@ public class IndexingServiceImpl implements IndexingService {
         }
 
         isIndexingRunning = false;
-        return new IndexingResponse(true, null);
     }
 
     @Override
     public IndexingResponse stopIndexing() {
         isIndexingRunning = false;
-        siteCrawler.setInterrupted(true); // 🔌 Прерываем рекурсивный обход
-
+        siteCrawler.setInterrupted(true);
         return new IndexingResponse(true, null);
     }
 
