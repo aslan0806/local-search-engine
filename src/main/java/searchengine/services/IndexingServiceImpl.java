@@ -1,78 +1,63 @@
-package searchengine.services;
+package searchengine.services.indexing;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.scheduling.annotation.Async;
+import org.jsoup.nodes.Document;
 import org.springframework.stereotype.Service;
 import searchengine.dto.indexing.IndexingResponse;
+import searchengine.model.Page;
 import searchengine.model.SiteEntity;
+import searchengine.repositories.PageRepository;
 import searchengine.repositories.SiteRepository;
-import searchengine.services.indexing.IndexingTask;
-import searchengine.services.indexing.SiteCrawler;
 
+import java.io.IOException;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
 public class IndexingServiceImpl implements IndexingService {
 
     private final SiteRepository siteRepository;
+    private final PageRepository pageRepository;
     private final IndexingTask indexingTask;
     private final SiteCrawler siteCrawler;
 
-    private volatile boolean isIndexingRunning = false;
-
     @Override
     public IndexingResponse startIndexing() {
-        if (isIndexingRunning) {
-            return new IndexingResponse(false, "Индексация уже запущена");
-        }
-
-        isIndexingRunning = true;
-        runIndexingAsync(); // 🔁 Запускаем в отдельном потоке
-
-        return new IndexingResponse(true, null);
-    }
-
-    @Async
-    public void runIndexingAsync() {
         List<SiteEntity> sites = siteRepository.findAll();
-
         for (SiteEntity site : sites) {
-            siteCrawler.clearVisited();
-            siteCrawler.setInterrupted(false);
-            siteCrawler.crawl(site.getUrl(), site);
-
-            if (!isIndexingRunning) {
-                break;
-            }
+            siteCrawler.crawlSite(site);
         }
-
-        isIndexingRunning = false;
+        return new IndexingResponse(true, null);
     }
 
     @Override
     public IndexingResponse stopIndexing() {
-        isIndexingRunning = false;
-        siteCrawler.setInterrupted(true);
-        return new IndexingResponse(true, null);
+        // Пока просто заглушка
+        return new IndexingResponse(false, "Остановка индексации не реализована");
     }
 
-    @Override
     public IndexingResponse indexPage(String url) {
-        SiteEntity site = siteRepository.findAll().stream()
-                .filter(s -> url.startsWith(s.getUrl()))
-                .findFirst()
-                .orElse(null);
+        Optional<SiteEntity> siteOpt = siteRepository.findAll().stream()
+                .filter(site -> url.startsWith(site.getUrl()))
+                .findFirst();
 
-        if (site == null) {
-            return new IndexingResponse(false, "Страница за пределами разрешённых сайтов");
+        if (siteOpt.isEmpty()) {
+            return new IndexingResponse(false, "Страница находится за пределами разрешённых сайтов");
         }
+
+        SiteEntity site = siteOpt.get();
+        String path = url.replace(site.getUrl(), "");
+
+        Optional<Page> existing = pageRepository.findByPathAndSite(path, site);
+        existing.ifPresent(pageRepository::delete); // если есть — удалим старую
 
         try {
-            indexingTask.indexPage(url, site);
-            return new IndexingResponse(true, null);
-        } catch (Exception e) {
-            return new IndexingResponse(false, "Ошибка индексации: " + e.getMessage());
+            indexingTask.indexPage(site, path);
+        } catch (IOException e) {
+            return new IndexingResponse(false, "Ошибка при индексации: " + e.getMessage());
         }
+
+        return new IndexingResponse(true, null);
     }
 }

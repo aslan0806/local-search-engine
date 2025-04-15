@@ -7,23 +7,23 @@ import searchengine.dto.indexing.IndexingResponse;
 import searchengine.services.IndexingService;
 
 @RestController
-@RequestMapping("/api")
 @RequiredArgsConstructor
+@RequestMapping("/api")
 public class IndexingController {
 
     private final IndexingService indexingService;
 
-    @GetMapping("/startIndexing")
+    @PostMapping("/startIndexing")
     public ResponseEntity<IndexingResponse> startIndexing() {
         return ResponseEntity.ok(indexingService.startIndexing());
     }
 
-    @GetMapping("/stopIndexing")
+    @PostMapping("/stopIndexing")
     public ResponseEntity<IndexingResponse> stopIndexing() {
         return ResponseEntity.ok(indexingService.stopIndexing());
     }
 
-    @GetMapping("/indexPage") // ✅ Новый метод
+    @PostMapping("/indexPage")
     public ResponseEntity<IndexingResponse> indexPage(@RequestParam String url) {
         return ResponseEntity.ok(indexingService.indexPage(url));
     }

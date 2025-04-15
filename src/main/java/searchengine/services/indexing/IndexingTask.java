@@ -11,6 +11,7 @@ import searchengine.repositories.LemmaRepository;
 import searchengine.repositories.PageRepository;
 import searchengine.services.LemmaService;
 
+import java.io.IOException;
 import java.util.Map;
 
 @Component
@@ -23,46 +24,46 @@ public class IndexingTask {
     private final LemmaService lemmaService;
 
     @Transactional
-    public void indexPage(String url, SiteEntity site) {
-        try {
-            Document doc = Jsoup.connect(url).get();
-            String html = doc.outerHtml();
+    public void indexPage(SiteEntity site, String path) throws IOException {
+        String fullUrl = site.getUrl() + path;
+        Document document = Jsoup.connect(fullUrl).get();
+        String html = document.outerHtml();
+        String text = document.text();
 
-            Page page = new Page();
-            page.setSite(site);
-            page.setPath(url.replace(site.getUrl(), ""));
-            page.setCode(200);
-            page.setContent(html);
-            pageRepository.save(page);
+        // 1. Сохраняем страницу
+        Page page = new Page();
+        page.setSite(site);
+        page.setPath(path);
+        page.setCode(200);
+        page.setContent(html);
+        pageRepository.save(page);
 
-            Map<String, Integer> lemmas = lemmaService.lemmatize(doc.text());
+        // 2. Лемматизация
+        Map<String, Integer> lemmaMap = lemmaService.lemmatize(text);
 
-            for (Map.Entry<String, Integer> entry : lemmas.entrySet()) {
-                String lemmaText = entry.getKey();
-                int count = entry.getValue();
+        for (Map.Entry<String, Integer> entry : lemmaMap.entrySet()) {
+            String lemmaText = entry.getKey();
+            int frequency = entry.getValue();
 
-                Lemma lemma = lemmaRepository.findByLemmaAndSite(lemmaText, site)
-                        .orElseGet(() -> {
-                            Lemma newLemma = new Lemma();
-                            newLemma.setSite(site);
-                            newLemma.setLemma(lemmaText);
-                            newLemma.setFrequency(0);
-                            return newLemma;
-                        });
+            Lemma lemma = lemmaRepository.findByLemmaAndSite(lemmaText, site)
+                    .orElseGet(() -> {
+                        Lemma newLemma = new Lemma();
+                        newLemma.setSite(site);
+                        newLemma.setLemma(lemmaText);
+                        newLemma.setFrequency(0);
+                        return newLemma;
+                    });
 
-                lemma.setFrequency(lemma.getFrequency() + 1);
-                lemmaRepository.save(lemma);
+            lemma.setFrequency(lemma.getFrequency() + 1);
+            lemmaRepository.save(lemma);
 
-                Index index = new Index();
-                index.setPage(page);
-                index.setLemma(lemma);
-                index.setRank(count);
-                indexRepository.save(index);
-            }
-
-        } catch (Exception e) {
-            System.out.println("❌ Ошибка при индексации страницы: " + url);
-            e.printStackTrace();
+            Index index = new Index();
+            index.setPage(page);
+            index.setLemma(lemma);
+            index.setRank(frequency);
+            indexRepository.save(index);
         }
+
+        System.out.println("✅ Индексация завершена: " + fullUrl);
     }
 }

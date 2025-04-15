@@ -8,6 +8,7 @@ import org.jsoup.select.Elements;
 import org.springframework.stereotype.Component;
 import searchengine.model.SiteEntity;
 
+import java.io.IOException;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -16,43 +17,35 @@ import java.util.Set;
 public class SiteCrawler {
 
     private final IndexingTask indexingTask;
-    private final Set<String> visitedUrls = new HashSet<>();
-    private volatile boolean isInterrupted = false;
+    private final Set<String> visited = new HashSet<>();
 
-    public void crawl(String url, SiteEntity site) {
-        if (isInterrupted || visitedUrls.contains(url)) return;
-        visitedUrls.add(url);
+    public void crawlSite(SiteEntity site) {
+        String baseUrl = site.getUrl();
+        visited.clear();
+        crawl(baseUrl, site);
+    }
 
+    private void crawl(String url, SiteEntity site) {
+        if (visited.contains(url) || !url.startsWith(site.getUrl())) {
+            return;
+        }
+
+        visited.add(url);
+        String path = url.replace(site.getUrl(), "");
         try {
-            Document doc = Jsoup.connect(url).get();
-            indexingTask.indexPage(url, site);
+            indexingTask.indexPage(site, path);
 
+            Document doc = Jsoup.connect(url).get();
             Elements links = doc.select("a[href]");
             for (Element link : links) {
-                String href = link.attr("abs:href");
-
-                if (href.startsWith(site.getUrl()) &&
-                        !href.contains("#") &&
-                        !href.endsWith(".pdf") &&
-                        !href.endsWith(".jpg") &&
-                        !href.endsWith(".png") &&
-                        !href.endsWith(".jpeg")) {
-                    crawl(href, site);
+                String absHref = link.attr("abs:href").split("#")[0]; // убираем якоря
+                if (absHref.startsWith(site.getUrl()) && !visited.contains(absHref)) {
+                    crawl(absHref, site);
                 }
-
-                if (isInterrupted) break;
             }
 
-        } catch (Exception e) {
-            System.out.println("❌ Ошибка при обходе " + url + ": " + e.getMessage());
+        } catch (IOException e) {
+            System.out.println("❌ Ошибка при обходе: " + url);
         }
-    }
-
-    public void clearVisited() {
-        visitedUrls.clear();
-    }
-
-    public void setInterrupted(boolean interrupted) {
-        this.isInterrupted = interrupted;
     }
 }
