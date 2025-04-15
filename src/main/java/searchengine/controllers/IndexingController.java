@@ -7,8 +7,8 @@ import searchengine.dto.indexing.IndexingResponse;
 import searchengine.services.IndexingService;
 
 @RestController
-@RequestMapping("/api")
 @RequiredArgsConstructor
+@RequestMapping("/api")
 public class IndexingController {
 
     private final IndexingService indexingService;
