@@ -18,21 +18,38 @@ public class IndexingServiceImpl implements IndexingService {
     private final IndexingTask indexingTask;
     private final SiteCrawler siteCrawler;
 
+    private volatile boolean isIndexingRunning = false;
+
     @Override
     public IndexingResponse startIndexing() {
+        if (isIndexingRunning) {
+            return new IndexingResponse(false, "Индексация уже запущена");
+        }
+
+        isIndexingRunning = true;
+
         List<SiteEntity> sites = siteRepository.findAll();
 
         for (SiteEntity site : sites) {
-            siteCrawler.clearVisited(); // 🔄 сброс посещённых ссылок
-            siteCrawler.crawl(site.getUrl(), site); // 🌐 обход
+            siteCrawler.clearVisited();
+            siteCrawler.setInterrupted(false);
+            siteCrawler.crawl(site.getUrl(), site);
+
+            if (!isIndexingRunning) {
+                break;
+            }
         }
 
+        isIndexingRunning = false;
         return new IndexingResponse(true, null);
     }
 
     @Override
     public IndexingResponse stopIndexing() {
-        return new IndexingResponse(true, null); // пока заглушка
+        isIndexingRunning = false;
+        siteCrawler.setInterrupted(true); // 🔌 Прерываем рекурсивный обход
+
+        return new IndexingResponse(true, null);
     }
 
     @Override

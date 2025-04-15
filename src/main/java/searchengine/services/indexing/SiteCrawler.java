@@ -16,34 +16,31 @@ import java.util.Set;
 public class SiteCrawler {
 
     private final IndexingTask indexingTask;
-
     private final Set<String> visitedUrls = new HashSet<>();
+    private volatile boolean isInterrupted = false;
 
     public void crawl(String url, SiteEntity site) {
-        if (visitedUrls.contains(url)) return;
+        if (isInterrupted || visitedUrls.contains(url)) return;
         visitedUrls.add(url);
 
         try {
-            // ⬇️ Загрузка страницы
             Document doc = Jsoup.connect(url).get();
-
-            // 🔤 Индексация текущей страницы
             indexingTask.indexPage(url, site);
 
-            // 🔗 Сбор всех ссылок
             Elements links = doc.select("a[href]");
             for (Element link : links) {
                 String href = link.attr("abs:href");
 
-                // ✅ Фильтрация только внутренних страниц
                 if (href.startsWith(site.getUrl()) &&
                         !href.contains("#") &&
                         !href.endsWith(".pdf") &&
                         !href.endsWith(".jpg") &&
                         !href.endsWith(".png") &&
                         !href.endsWith(".jpeg")) {
-                    crawl(href, site); // 🔁 Рекурсивный вызов
+                    crawl(href, site);
                 }
+
+                if (isInterrupted) break;
             }
 
         } catch (Exception e) {
@@ -52,6 +49,10 @@ public class SiteCrawler {
     }
 
     public void clearVisited() {
-        visitedUrls.clear(); // 🔄 сброс между сайтами
+        visitedUrls.clear();
+    }
+
+    public void setInterrupted(boolean interrupted) {
+        this.isInterrupted = interrupted;
     }
 }
