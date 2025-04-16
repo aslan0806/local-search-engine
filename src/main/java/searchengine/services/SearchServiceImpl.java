@@ -7,10 +7,7 @@ import org.jsoup.safety.Safelist;
 import org.springframework.stereotype.Service;
 import searchengine.dto.search.SearchResponse;
 import searchengine.dto.search.SearchResultItem;
-import searchengine.model.Index;
-import searchengine.model.Lemma;
-import searchengine.model.Page;
-import searchengine.model.SiteEntity;
+import searchengine.model.*;
 import searchengine.repositories.IndexRepository;
 import searchengine.repositories.LemmaRepository;
 import searchengine.repositories.SiteRepository;
@@ -44,15 +41,15 @@ public class SearchServiceImpl implements SearchService {
                 ? siteRepository.findAll()
                 : Collections.singletonList(siteRepository.findByUrl(siteUrl));
 
-        List<SearchResultItem> results = new ArrayList<>();
+        List<SearchResultItem> allResults = new ArrayList<>();
 
         for (SiteEntity site : sites) {
             List<Lemma> lemmas = lemmaRepository.findAllByLemmaInAndSite(queryLemmas, site);
             if (lemmas.isEmpty()) continue;
 
             List<Index> indexes = indexRepository.findAllByLemmaIn(lemmas);
-
             Map<Page, Float> relevanceMap = new HashMap<>();
+
             for (Index index : indexes) {
                 Page page = index.getPage();
                 float rank = index.getRank();
@@ -62,39 +59,38 @@ public class SearchServiceImpl implements SearchService {
             for (Map.Entry<Page, Float> entry : relevanceMap.entrySet()) {
                 Page page = entry.getKey();
                 float relevance = entry.getValue();
-
                 Document doc = Jsoup.parse(page.getContent());
-                String title = doc.title();
-                String bodyText = Jsoup.clean(doc.body().text(), Safelist.none());
-                String snippet = makeSnippet(bodyText, queryLemmas);
+
+                String snippet = makeSnippet(doc.text(), queryLemmas);
 
                 SearchResultItem item = new SearchResultItem();
                 item.setSite(site.getUrl());
                 item.setSiteName(site.getName());
                 item.setUri(page.getPath());
-                item.setTitle(title);
+                item.setTitle(doc.title());
                 item.setSnippet(snippet);
                 item.setRelevance(relevance);
 
-                results.add(item);
+                allResults.add(item);
             }
         }
 
-        results.sort(Comparator.comparing(SearchResultItem::getRelevance).reversed());
+        allResults.sort(Comparator.comparing(SearchResultItem::getRelevance).reversed());
 
-        int total = results.size();
-        List<SearchResultItem> paginated = results.stream()
-                .skip(offset)
-                .limit(limit)
-                .collect(Collectors.toList());
+        // ✅ Добавим пагинацию
+        int toIndex = Math.min(offset + limit, allResults.size());
+        List<SearchResultItem> paged = allResults.subList(
+                Math.min(offset, allResults.size()),
+                toIndex
+        );
 
-        return new SearchResponse(true, total, paginated);
+        return new SearchResponse(true, allResults.size(), paged);
     }
 
     private String makeSnippet(String text, List<String> lemmas) {
         for (String lemma : lemmas) {
-            if (text.toLowerCase().contains(lemma)) {
-                int index = text.toLowerCase().indexOf(lemma);
+            int index = text.toLowerCase().indexOf(lemma);
+            if (index != -1) {
                 int start = Math.max(0, index - 30);
                 int end = Math.min(text.length(), index + 70);
                 String snippet = text.substring(start, end);

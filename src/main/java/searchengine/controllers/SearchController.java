@@ -18,8 +18,8 @@ public class SearchController {
             @RequestParam String query,
             @RequestParam(required = false) String site,
             @RequestParam(defaultValue = "0") int offset,
-            @RequestParam(defaultValue = "20") int limit) {
-
+            @RequestParam(defaultValue = "20") int limit
+    ) {
         SearchResponse response = searchService.search(query, site, offset, limit);
         return ResponseEntity.ok(response);
     }
