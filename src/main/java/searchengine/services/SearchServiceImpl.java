@@ -1,112 +1,106 @@
-package searchengine.services;
+package searchengine.services.impl;
 
 import lombok.RequiredArgsConstructor;
 import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.safety.Safelist;
 import org.springframework.stereotype.Service;
 import searchengine.dto.search.SearchResponse;
 import searchengine.dto.search.SearchResultItem;
-import searchengine.model.*;
+import searchengine.model.Index;
+import searchengine.model.Lemma;
+import searchengine.model.Page;
+import searchengine.model.SiteEntity;
 import searchengine.repositories.IndexRepository;
 import searchengine.repositories.LemmaRepository;
-import searchengine.repositories.PageRepository;
 import searchengine.repositories.SiteRepository;
+import searchengine.services.LemmaService;
+import searchengine.services.SearchService;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class SearchServiceImpl implements SearchService {
 
-    private final LemmaService lemmaService;
-    private final PageRepository pageRepository;
+    private final SiteRepository siteRepository;
     private final LemmaRepository lemmaRepository;
     private final IndexRepository indexRepository;
-    private final SiteRepository siteRepository;
+    private final LemmaService lemmaService;
 
     @Override
     public SearchResponse search(String query, String siteUrl, int offset, int limit) {
-        SearchResponse response = new SearchResponse();
-        if (query == null || query.trim().isEmpty()) {
-            response.setResult(false);
-            response.setData(Collections.emptyList());
-            response.setCount(0);
-            return response;
+        if (query == null || query.isBlank()) {
+            return new SearchResponse(false, 0, Collections.emptyList());
         }
 
-        Map<String, Integer> lemmas = lemmaService.lemmatize(query);
-        if (lemmas.isEmpty()) {
-            response.setResult(false);
-            response.setData(Collections.emptyList());
-            response.setCount(0);
-            return response;
+        List<String> queryLemmas = new ArrayList<>(lemmaService.lemmatize(query).keySet());
+        if (queryLemmas.isEmpty()) {
+            return new SearchResponse(false, 0, Collections.emptyList());
         }
 
-        Set<Page> foundPages = new HashSet<>();
-        List<Lemma> lemmaEntities = new ArrayList<>();
-
-        List<SiteEntity> sitesToSearch = siteUrl == null
+        List<SiteEntity> sites = (siteUrl == null || siteUrl.isBlank())
                 ? siteRepository.findAll()
                 : Collections.singletonList(siteRepository.findByUrl(siteUrl));
 
-        for (SiteEntity site : sitesToSearch) {
-            for (String lemmaText : lemmas.keySet()) {
-                lemmaRepository.findByLemmaAndSite(lemmaText, site)
-                        .ifPresent(lemmaEntities::add);
-            }
-        }
+        List<SearchResultItem> results = new ArrayList<>();
 
-        if (lemmaEntities.isEmpty()) {
-            response.setResult(false);
-            response.setData(Collections.emptyList());
-            response.setCount(0);
-            return response;
-        }
+        for (SiteEntity site : sites) {
+            List<Lemma> lemmas = lemmaRepository.findAllByLemmaInAndSite(queryLemmas, site);
+            if (lemmas.isEmpty()) continue;
 
-        Map<Page, Float> pageRelevance = new HashMap<>();
-        for (Lemma lemma : lemmaEntities) {
-            for (Index index : lemma.getIndexes()) {
+            List<Index> indexes = indexRepository.findAllByLemmaIn(lemmas);
+
+            Map<Page, Float> relevanceMap = new HashMap<>();
+            for (Index index : indexes) {
                 Page page = index.getPage();
-                pageRelevance.put(page,
-                        pageRelevance.getOrDefault(page, 0f) + index.getRank());
+                float rank = index.getRank();
+                relevanceMap.put(page, relevanceMap.getOrDefault(page, 0f) + rank);
+            }
+
+            for (Map.Entry<Page, Float> entry : relevanceMap.entrySet()) {
+                Page page = entry.getKey();
+                float relevance = entry.getValue();
+
+                Document doc = Jsoup.parse(page.getContent());
+                String title = doc.title();
+                String bodyText = Jsoup.clean(doc.body().text(), Safelist.none());
+                String snippet = makeSnippet(bodyText, queryLemmas);
+
+                SearchResultItem item = new SearchResultItem();
+                item.setSite(site.getUrl());
+                item.setSiteName(site.getName());
+                item.setUri(page.getPath());
+                item.setTitle(title);
+                item.setSnippet(snippet);
+                item.setRelevance(relevance);
+
+                results.add(item);
             }
         }
 
-        List<Map.Entry<Page, Float>> sorted = new ArrayList<>(pageRelevance.entrySet());
-        sorted.sort(Map.Entry.<Page, Float>comparingByValue().reversed());
+        results.sort(Comparator.comparing(SearchResultItem::getRelevance).reversed());
 
-        List<SearchResultItem> resultItems = new ArrayList<>();
-        int end = Math.min(offset + limit, sorted.size());
-        for (int i = offset; i < end; i++) {
-            Page page = sorted.get(i).getKey();
-            Float relevance = sorted.get(i).getValue();
-            resultItems.add(toSearchResult(page, relevance));
+        int total = results.size();
+        List<SearchResultItem> paginated = results.stream()
+                .skip(offset)
+                .limit(limit)
+                .collect(Collectors.toList());
+
+        return new SearchResponse(true, total, paginated);
+    }
+
+    private String makeSnippet(String text, List<String> lemmas) {
+        for (String lemma : lemmas) {
+            if (text.toLowerCase().contains(lemma)) {
+                int index = text.toLowerCase().indexOf(lemma);
+                int start = Math.max(0, index - 30);
+                int end = Math.min(text.length(), index + 70);
+                String snippet = text.substring(start, end);
+                return snippet.replaceAll("(?i)(" + lemma + ")", "<b>$1</b>");
+            }
         }
-
-        response.setResult(true);
-        response.setCount(sorted.size());
-        response.setData(resultItems);
-        return response;
-    }
-
-    private SearchResultItem toSearchResult(Page page, float relevance) {
-        SearchResultItem item = new SearchResultItem();
-        item.setSite(page.getSite().getUrl());
-        item.setSiteName(page.getSite().getName());
-        item.setUri(page.getPath());
-
-        String text = Jsoup.parse(page.getContent()).text();
-        item.setTitle(extractTitle(text));
-        item.setSnippet(makeSnippet(text));
-        item.setRelevance(relevance);
-
-        return item;
-    }
-
-    private String extractTitle(String text) {
-        return text.length() > 50 ? text.substring(0, 50) + "..." : text;
-    }
-
-    private String makeSnippet(String text) {
         return text.length() > 150 ? text.substring(0, 150) + "..." : text;
     }
 }

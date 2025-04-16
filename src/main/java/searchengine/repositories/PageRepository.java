@@ -5,11 +5,11 @@ import org.springframework.stereotype.Repository;
 import searchengine.model.Page;
 import searchengine.model.SiteEntity;
 
-import java.util.Optional;
+import java.util.List;
 
 @Repository
 public interface PageRepository extends JpaRepository<Page, Integer> {
     long countBySite(SiteEntity site);
 
-    Optional<Page> findByPathAndSite(String path, SiteEntity site); // 👈 добавь этот метод
+    List<Page> findAllBySite(SiteEntity site); // ✅ добавь этот метод
 }
