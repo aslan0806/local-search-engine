@@ -5,115 +5,108 @@ import org.jsoup.Jsoup;
 import org.springframework.stereotype.Service;
 import searchengine.dto.search.SearchResponse;
 import searchengine.dto.search.SearchResultItem;
-import searchengine.model.Index;
-import searchengine.model.Lemma;
-import searchengine.model.Page;
-import searchengine.model.SiteEntity;
-import searchengine.repositories.*;
+import searchengine.model.*;
+import searchengine.repositories.IndexRepository;
+import searchengine.repositories.LemmaRepository;
+import searchengine.repositories.PageRepository;
+import searchengine.repositories.SiteRepository;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class SearchServiceImpl implements SearchService {
 
     private final LemmaService lemmaService;
+    private final PageRepository pageRepository;
     private final LemmaRepository lemmaRepository;
     private final IndexRepository indexRepository;
-    private final PageRepository pageRepository;
     private final SiteRepository siteRepository;
 
     @Override
     public SearchResponse search(String query, String siteUrl, int offset, int limit) {
         SearchResponse response = new SearchResponse();
-        if (query.isBlank()) {
+        if (query == null || query.trim().isEmpty()) {
             response.setResult(false);
+            response.setData(Collections.emptyList());
+            response.setCount(0);
             return response;
         }
 
-        // 1. Определяем сайт
-        List<SiteEntity> sites = siteUrl == null
+        Map<String, Integer> lemmas = lemmaService.lemmatize(query);
+        if (lemmas.isEmpty()) {
+            response.setResult(false);
+            response.setData(Collections.emptyList());
+            response.setCount(0);
+            return response;
+        }
+
+        Set<Page> foundPages = new HashSet<>();
+        List<Lemma> lemmaEntities = new ArrayList<>();
+
+        List<SiteEntity> sitesToSearch = siteUrl == null
                 ? siteRepository.findAll()
                 : Collections.singletonList(siteRepository.findByUrl(siteUrl));
 
-        // 2. Получаем леммы из запроса
-        Map<String, Integer> lemmas = lemmaService.lemmatize(query);
-
-        // 3. Получаем все леммы, существующие в базе
-        List<Lemma> foundLemmas = new ArrayList<>();
-        for (SiteEntity site : sites) {
-            for (String lemma : lemmas.keySet()) {
-                lemmaRepository.findByLemmaAndSite(lemma, site).ifPresent(foundLemmas::add);
+        for (SiteEntity site : sitesToSearch) {
+            for (String lemmaText : lemmas.keySet()) {
+                lemmaRepository.findByLemmaAndSite(lemmaText, site)
+                        .ifPresent(lemmaEntities::add);
             }
         }
 
-        if (foundLemmas.isEmpty()) {
-            response.setResult(true);
-            response.setCount(0);
+        if (lemmaEntities.isEmpty()) {
+            response.setResult(false);
             response.setData(Collections.emptyList());
+            response.setCount(0);
             return response;
         }
 
-        // 4. Собираем все страницы, на которых есть хотя бы одна из лемм
         Map<Page, Float> pageRelevance = new HashMap<>();
-        for (Lemma lemma : foundLemmas) {
-            List<Index> indexes = indexRepository.findAll()
-                    .stream()
-                    .filter(i -> i.getLemma().getId() == lemma.getId())
-                    .toList();
-
-            for (Index index : indexes) {
+        for (Lemma lemma : lemmaEntities) {
+            for (Index index : lemma.getIndexes()) {
                 Page page = index.getPage();
-                float rank = index.getRank();
-                pageRelevance.put(page, pageRelevance.getOrDefault(page, 0f) + rank);
+                pageRelevance.put(page,
+                        pageRelevance.getOrDefault(page, 0f) + index.getRank());
             }
         }
 
-        // 5. Сортируем по убыванию релевантности
-        List<Map.Entry<Page, Float>> sorted = pageRelevance.entrySet()
-                .stream()
-                .sorted(Map.Entry.<Page, Float>comparingByValue().reversed())
-                .skip(offset)
-                .limit(limit)
-                .toList();
+        List<Map.Entry<Page, Float>> sorted = new ArrayList<>(pageRelevance.entrySet());
+        sorted.sort(Map.Entry.<Page, Float>comparingByValue().reversed());
 
-        // 6. Формируем результат
-        List<SearchResultItem> items = new ArrayList<>();
-        for (Map.Entry<Page, Float> entry : sorted) {
-            Page page = entry.getKey();
-            float relevance = entry.getValue();
-
-            SearchResultItem item = new SearchResultItem();
-            item.setSite(page.getSite().getUrl());
-            item.setSiteName(page.getSite().getName());
-            item.setUri(page.getPath());
-            item.setTitle(getTitle(page.getContent()));
-            item.setSnippet(getSnippet(page.getContent(), lemmas.keySet()));
-            item.setRelevance(relevance);
-            items.add(item);
+        List<SearchResultItem> resultItems = new ArrayList<>();
+        int end = Math.min(offset + limit, sorted.size());
+        for (int i = offset; i < end; i++) {
+            Page page = sorted.get(i).getKey();
+            Float relevance = sorted.get(i).getValue();
+            resultItems.add(toSearchResult(page, relevance));
         }
 
         response.setResult(true);
-        response.setCount(pageRelevance.size());
-        response.setData(items);
+        response.setCount(sorted.size());
+        response.setData(resultItems);
         return response;
     }
 
-    private String getTitle(String html) {
-        return Jsoup.parse(html).title();
+    private SearchResultItem toSearchResult(Page page, float relevance) {
+        SearchResultItem item = new SearchResultItem();
+        item.setSite(page.getSite().getUrl());
+        item.setSiteName(page.getSite().getName());
+        item.setUri(page.getPath());
+
+        String text = Jsoup.parse(page.getContent()).text();
+        item.setTitle(extractTitle(text));
+        item.setSnippet(makeSnippet(text));
+        item.setRelevance(relevance);
+
+        return item;
     }
 
-    private String getSnippet(String html, Set<String> lemmas) {
-        String text = Jsoup.parse(html).text();
-        for (String lemma : lemmas) {
-            int idx = text.toLowerCase().indexOf(lemma.toLowerCase());
-            if (idx != -1) {
-                int start = Math.max(0, idx - 30);
-                int end = Math.min(text.length(), idx + 60);
-                return "... " + text.substring(start, end).replaceAll("(?i)(" + lemma + ")", "<b>$1</b>") + " ...";
-            }
-        }
-        return text.length() > 160 ? text.substring(0, 160) + "..." : text;
+    private String extractTitle(String text) {
+        return text.length() > 50 ? text.substring(0, 50) + "..." : text;
+    }
+
+    private String makeSnippet(String text) {
+        return text.length() > 150 ? text.substring(0, 150) + "..." : text;
     }
 }
