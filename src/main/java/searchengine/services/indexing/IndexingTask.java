@@ -1,6 +1,7 @@
 package searchengine.services.indexing;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.springframework.scheduling.annotation.Async;
@@ -17,6 +18,7 @@ import java.util.Map;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class IndexingTask {
 
     private final PageRepository pageRepository;
@@ -28,6 +30,8 @@ public class IndexingTask {
     @Transactional
     public void indexPage(SiteEntity site, String path) throws IOException {
         String fullUrl = site.getUrl() + path;
+        log.info("🔍 Начинаем индексацию: {}", fullUrl);
+
         Document doc = Jsoup.connect(fullUrl).get();
         String html = doc.outerHtml();
 
@@ -37,6 +41,7 @@ public class IndexingTask {
         page.setCode(200);
         page.setContent(html);
         pageRepository.save(page);
+        log.info("📄 Сохранена страница: {}", path);
 
         Map<String, Integer> lemmas = lemmaService.lemmatize(doc.text());
 
@@ -63,6 +68,6 @@ public class IndexingTask {
             indexRepository.save(index);
         }
 
-        System.out.println("✅ Async: Индексирована страница " + path);
+        log.info("✅ Индексация завершена: {}", fullUrl);
     }
 }

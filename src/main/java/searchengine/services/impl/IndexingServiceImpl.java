@@ -1,6 +1,7 @@
 package searchengine.services.impl;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import searchengine.dto.indexing.IndexingResponse;
 import searchengine.model.Page;
@@ -17,6 +18,7 @@ import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class IndexingServiceImpl implements IndexingService {
 
     private final SiteRepository siteRepository;
@@ -29,10 +31,12 @@ public class IndexingServiceImpl implements IndexingService {
     @Override
     public IndexingResponse startIndexing() {
         if (isIndexing) {
+            log.warn("⚠️ Попытка повторного запуска индексации");
             return new IndexingResponse(false, "⚠️ Индексация уже запущена");
         }
 
         isIndexing = true;
+        log.info("▶️ Запуск индексации всех сайтов");
 
         new Thread(() -> {
             for (SiteEntity site : siteRepository.findAll()) {
@@ -43,9 +47,11 @@ public class IndexingServiceImpl implements IndexingService {
                 site.setLastError(null);
                 siteRepository.save(site);
 
-                siteCrawler.crawlSite(site); // ⛏ Рекурсивный обход
+                log.info("🌐 Индексация сайта: {}", site.getUrl());
+                siteCrawler.crawlSite(site);
             }
             isIndexing = false;
+            log.info("🏁 Индексация завершена");
         }).start();
 
         return new IndexingResponse(true, null);
@@ -54,10 +60,12 @@ public class IndexingServiceImpl implements IndexingService {
     @Override
     public IndexingResponse stopIndexing() {
         if (!isIndexing) {
+            log.warn("⚠️ Попытка остановки несуществующей индексации");
             return new IndexingResponse(false, "⚠️ Индексация не запущена");
         }
 
         isIndexing = false;
+        log.info("🛑 Индексация остановлена пользователем");
         return new IndexingResponse(true, null);
     }
 
@@ -70,7 +78,8 @@ public class IndexingServiceImpl implements IndexingService {
                 .orElse(null);
 
         if (site == null) {
-            return new IndexingResponse(false, "⛔ Данная страница находится за пределами разрешённых сайтов");
+            log.error("⛔ URL вне разрешенных сайтов: {}", url);
+            return new IndexingResponse(false, "⛔ Данная страница находится за пределами разрешенных сайтов");
         }
 
         String path = url.replace(site.getUrl(), "");
@@ -80,9 +89,11 @@ public class IndexingServiceImpl implements IndexingService {
 
         try {
             indexingTask.indexPage(site, path);
+            log.info("🔁 Страница переиндексирована: {}", url);
             return new IndexingResponse(true, null);
         } catch (Exception e) {
-            return new IndexingResponse(false, "❌ Ошибка индексации страницы: " + e.getMessage());
+            log.error("❌ Ошибка при индексации {}: {}", url, e.getMessage());
+            return new IndexingResponse(false, "❌ Ошибка индексации: " + e.getMessage());
         }
     }
 }
