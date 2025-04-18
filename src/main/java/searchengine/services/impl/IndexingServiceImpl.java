@@ -2,6 +2,7 @@ package searchengine.services.impl;
 
 import lombok.RequiredArgsConstructor;
 import org.jsoup.HttpStatusException;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import searchengine.dto.indexing.IndexingResponse;
 import searchengine.model.Page;
@@ -35,21 +36,23 @@ public class IndexingServiceImpl implements IndexingService {
         }
 
         isIndexing = true;
-        new Thread(() -> {
-            for (SiteEntity site : siteRepository.findAll()) {
-                if (!isIndexing) break;
-
-                site.setStatus(StatusType.INDEXING);
-                site.setStatusTime(LocalDateTime.now());
-                site.setLastError(null);
-                siteRepository.save(site);
-
-                siteCrawler.crawlSite(site);
-            }
-            isIndexing = false;
-        }).start();
-
+        runAsyncIndexing(); // 💡 Асинхронный запуск
         return new IndexingResponse(true, null);
+    }
+
+    @Async
+    public void runAsyncIndexing() {
+        for (SiteEntity site : siteRepository.findAll()) {
+            if (!isIndexing) break;
+
+            site.setStatus(StatusType.INDEXING);
+            site.setStatusTime(LocalDateTime.now());
+            site.setLastError(null);
+            siteRepository.save(site);
+
+            siteCrawler.crawlSite(site); // рекурсивный обход сайта
+        }
+        isIndexing = false;
     }
 
     @Override
@@ -75,20 +78,16 @@ public class IndexingServiceImpl implements IndexingService {
         }
 
         String path = url.replace(site.getUrl(), "");
-
-        // Удалим старую версию, если есть
         Optional<Page> oldPage = pageRepository.findByPathAndSite(path, site);
         oldPage.ifPresent(pageRepository::delete);
 
         try {
             indexingTask.indexPage(site, path);
             return new IndexingResponse(true, null);
-
         } catch (HttpStatusException httpEx) {
             return new IndexingResponse(false, "Ошибка HTTP: " + httpEx.getStatusCode());
-
         } catch (IOException ioEx) {
-            return new IndexingResponse(false, "Ошибка ввода-вывода: " + ioEx.getMessage());
+            return new IndexingResponse(false, "Ошибка загрузки: " + ioEx.getMessage());
         }
     }
 }
