@@ -2,7 +2,6 @@ package searchengine.repositories;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import searchengine.model.SearchLog;
 
@@ -20,6 +19,5 @@ public interface SearchLogRepository extends JpaRepository<SearchLog, Integer> {
 
     List<SearchLog> findTop10ByOrderByTimestampDesc();
 
-    @Query("SELECT s FROM SearchLog s WHERE s.timestamp BETWEEN :start AND :end ORDER BY s.timestamp DESC")
-    List<SearchLog> findByDateRange(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
+    List<SearchLog> findAllByTimestampBetween(LocalDateTime from, LocalDateTime to); // 🆕 фильтрация по дате
 }
