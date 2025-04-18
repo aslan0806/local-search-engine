@@ -7,10 +7,7 @@ import org.jsoup.safety.Safelist;
 import org.springframework.stereotype.Service;
 import searchengine.dto.search.SearchResponse;
 import searchengine.dto.search.SearchResultItem;
-import searchengine.model.Index;
-import searchengine.model.Lemma;
-import searchengine.model.Page;
-import searchengine.model.SiteEntity;
+import searchengine.model.*;
 import searchengine.repositories.IndexRepository;
 import searchengine.repositories.LemmaRepository;
 import searchengine.repositories.SiteRepository;
@@ -35,8 +32,7 @@ public class SearchServiceImpl implements SearchService {
             return new SearchResponse(false, 0, Collections.emptyList());
         }
 
-        Map<String, Integer> queryLemmaMap = lemmaService.lemmatize(query);
-        List<String> queryLemmas = new ArrayList<>(queryLemmaMap.keySet());
+        List<String> queryLemmas = new ArrayList<>(lemmaService.lemmatize(query).keySet());
 
         if (queryLemmas.isEmpty()) {
             return new SearchResponse(false, 0, Collections.emptyList());
@@ -68,7 +64,6 @@ public class SearchServiceImpl implements SearchService {
                 Document doc = Jsoup.parse(page.getContent());
                 String title = doc.title();
                 String bodyText = Jsoup.clean(doc.body().text(), Safelist.none());
-
                 String snippet = makeSnippet(bodyText, queryLemmas);
 
                 SearchResultItem item = new SearchResultItem();
@@ -85,19 +80,17 @@ public class SearchServiceImpl implements SearchService {
 
         results.sort(Comparator.comparing(SearchResultItem::getRelevance).reversed());
 
-        List<SearchResultItem> paginated = results.stream()
-                .skip(offset)
-                .limit(limit)
-                .collect(Collectors.toList());
+        // Применяем offset и limit
+        int toIndex = Math.min(offset + limit, results.size());
+        List<SearchResultItem> paged = results.subList(Math.min(offset, results.size()), toIndex);
 
-        return new SearchResponse(true, results.size(), paginated);
+        return new SearchResponse(true, results.size(), paged);
     }
 
     private String makeSnippet(String text, List<String> lemmas) {
-        String lowerText = text.toLowerCase();
         for (String lemma : lemmas) {
-            int index = lowerText.indexOf(lemma);
-            if (index != -1) {
+            if (text.toLowerCase().contains(lemma)) {
+                int index = text.toLowerCase().indexOf(lemma);
                 int start = Math.max(0, index - 30);
                 int end = Math.min(text.length(), index + 70);
                 String snippet = text.substring(start, end);

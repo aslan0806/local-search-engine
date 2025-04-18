@@ -10,9 +10,13 @@ import java.util.Optional;
 
 @Repository
 public interface LemmaRepository extends JpaRepository<Lemma, Integer> {
+
+    // Подсчёт количества лемм для конкретного сайта
     long countBySite(SiteEntity site);
 
+    // Поиск одной леммы по тексту и сайту
     Optional<Lemma> findByLemmaAndSite(String lemma, SiteEntity site);
 
+    // Поиск всех лемм по списку значений и сайту
     List<Lemma> findAllByLemmaInAndSite(List<String> lemmas, SiteEntity site);
 }

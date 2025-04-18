@@ -1,16 +1,16 @@
 package searchengine.controllers;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import searchengine.dto.search.SearchResponse;
 import searchengine.services.SearchService;
 
-import java.util.Collections;
-
 @RestController
-@RequiredArgsConstructor
 @RequestMapping("/api")
+@RequiredArgsConstructor
+@Slf4j
 public class SearchController {
 
     private final SearchService searchService;
@@ -22,13 +22,9 @@ public class SearchController {
             @RequestParam(defaultValue = "0") int offset,
             @RequestParam(defaultValue = "20") int limit) {
 
-        if (query == null || query.trim().isEmpty()) {
-            return ResponseEntity.badRequest().body(
-                    new SearchResponse(false, 0, Collections.emptyList())
-            );
-        }
-
+        log.info("🔍 Поиск: query='{}', site='{}', offset={}, limit={}", query, site, offset, limit);
         SearchResponse response = searchService.search(query, site, offset, limit);
+        log.info("🔎 Найдено результатов: {}", response.getCount());
         return ResponseEntity.ok(response);
     }
 }
