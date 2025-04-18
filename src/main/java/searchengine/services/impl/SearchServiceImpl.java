@@ -8,12 +8,11 @@ import org.springframework.stereotype.Service;
 import searchengine.dto.search.SearchResponse;
 import searchengine.dto.search.SearchResultItem;
 import searchengine.model.*;
-import searchengine.repositories.IndexRepository;
-import searchengine.repositories.LemmaRepository;
-import searchengine.repositories.SiteRepository;
+import searchengine.repositories.*;
 import searchengine.services.LemmaService;
 import searchengine.services.SearchService;
 
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -25,17 +24,20 @@ public class SearchServiceImpl implements SearchService {
     private final LemmaRepository lemmaRepository;
     private final IndexRepository indexRepository;
     private final LemmaService lemmaService;
+    private final SearchLogRepository searchLogRepository;
 
     @Override
     public SearchResponse search(String query, String siteUrl, int offset, int limit) {
         if (query == null || query.isBlank()) {
-            return new SearchResponse(false, 0, Collections.emptyList());
+            return logAndReturn(query, siteUrl, offset, limit, 0,
+                    new SearchResponse(false, 0, Collections.emptyList()));
         }
 
         List<String> queryLemmas = new ArrayList<>(lemmaService.lemmatize(query).keySet());
 
         if (queryLemmas.isEmpty()) {
-            return new SearchResponse(false, 0, Collections.emptyList());
+            return logAndReturn(query, siteUrl, offset, limit, 0,
+                    new SearchResponse(false, 0, Collections.emptyList()));
         }
 
         List<SiteEntity> sites = (siteUrl == null || siteUrl.isBlank())
@@ -79,12 +81,25 @@ public class SearchServiceImpl implements SearchService {
         }
 
         results.sort(Comparator.comparing(SearchResultItem::getRelevance).reversed());
+        List<SearchResultItem> page = results.stream()
+                .skip(offset)
+                .limit(limit)
+                .collect(Collectors.toList());
 
-        // Применяем offset и limit
-        int toIndex = Math.min(offset + limit, results.size());
-        List<SearchResultItem> paged = results.subList(Math.min(offset, results.size()), toIndex);
+        return logAndReturn(query, siteUrl, offset, limit, results.size(),
+                new SearchResponse(true, results.size(), page));
+    }
 
-        return new SearchResponse(true, results.size(), paged);
+    private SearchResponse logAndReturn(String query, String site, int offset, int limit, int resultsCount, SearchResponse response) {
+        SearchLog log = new SearchLog();
+        log.setQuery(query);
+        log.setSite(site);
+        log.setOffset(offset);
+        log.setLimit(limit);
+        log.setResults(resultsCount);
+        log.setTimestamp(LocalDateTime.now());
+        searchLogRepository.save(log);
+        return response;
     }
 
     private String makeSnippet(String text, List<String> lemmas) {
