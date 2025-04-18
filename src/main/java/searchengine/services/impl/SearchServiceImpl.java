@@ -8,7 +8,10 @@ import org.springframework.stereotype.Service;
 import searchengine.dto.search.SearchResponse;
 import searchengine.dto.search.SearchResultItem;
 import searchengine.model.*;
-import searchengine.repositories.*;
+import searchengine.repositories.IndexRepository;
+import searchengine.repositories.LemmaRepository;
+import searchengine.repositories.SearchLogRepository;
+import searchengine.repositories.SiteRepository;
 import searchengine.services.LemmaService;
 import searchengine.services.SearchService;
 
@@ -29,15 +32,14 @@ public class SearchServiceImpl implements SearchService {
     @Override
     public SearchResponse search(String query, String siteUrl, int offset, int limit) {
         if (query == null || query.isBlank()) {
-            return logAndReturn(query, siteUrl, offset, limit, 0,
-                    new SearchResponse(false, 0, Collections.emptyList()));
+            logSearch(query, siteUrl, offset, limit, 0);
+            return new SearchResponse(false, 0, Collections.emptyList());
         }
 
         List<String> queryLemmas = new ArrayList<>(lemmaService.lemmatize(query).keySet());
-
         if (queryLemmas.isEmpty()) {
-            return logAndReturn(query, siteUrl, offset, limit, 0,
-                    new SearchResponse(false, 0, Collections.emptyList()));
+            logSearch(query, siteUrl, offset, limit, 0);
+            return new SearchResponse(false, 0, Collections.emptyList());
         }
 
         List<SiteEntity> sites = (siteUrl == null || siteUrl.isBlank())
@@ -81,16 +83,20 @@ public class SearchServiceImpl implements SearchService {
         }
 
         results.sort(Comparator.comparing(SearchResultItem::getRelevance).reversed());
-        List<SearchResultItem> page = results.stream()
+
+        // 📦 Сохраняем лог
+        logSearch(query, siteUrl, offset, limit, results.size());
+
+        // 🔢 Пагинация
+        List<SearchResultItem> paginated = results.stream()
                 .skip(offset)
                 .limit(limit)
                 .collect(Collectors.toList());
 
-        return logAndReturn(query, siteUrl, offset, limit, results.size(),
-                new SearchResponse(true, results.size(), page));
+        return new SearchResponse(true, results.size(), paginated);
     }
 
-    private SearchResponse logAndReturn(String query, String site, int offset, int limit, int resultsCount, SearchResponse response) {
+    private void logSearch(String query, String site, int offset, int limit, int resultsCount) {
         SearchLog log = new SearchLog();
         log.setQuery(query);
         log.setSite(site);
@@ -99,7 +105,6 @@ public class SearchServiceImpl implements SearchService {
         log.setResults(resultsCount);
         log.setTimestamp(LocalDateTime.now());
         searchLogRepository.save(log);
-        return response;
     }
 
     private String makeSnippet(String text, List<String> lemmas) {
