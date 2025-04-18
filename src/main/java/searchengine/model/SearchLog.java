@@ -17,14 +17,11 @@ public class SearchLog {
     private int id;
 
     private String query;
-
     private String site;
-
     private int offset;
-
     private int limit;
-
     private int results;
 
+    @Column(name = "timestamp", columnDefinition = "DATETIME")
     private LocalDateTime timestamp;
 }
