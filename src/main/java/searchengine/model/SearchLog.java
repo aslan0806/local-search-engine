@@ -22,6 +22,5 @@ public class SearchLog {
     private int limit;
     private int results;
 
-    @Column(name = "timestamp", columnDefinition = "DATETIME")
     private LocalDateTime timestamp;
 }
