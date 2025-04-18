@@ -24,46 +24,49 @@ public class IndexingTask {
     private final LemmaService lemmaService;
 
     @Transactional
-    public void indexPage(SiteEntity site, String path) throws IOException {
-        String fullUrl = site.getUrl() + path;
-        Document document = Jsoup.connect(fullUrl).get();
-        String html = document.outerHtml();
-        String text = document.text();
+    public void indexPage(SiteEntity site, String path) {
+        try {
+            String fullUrl = site.getUrl() + path;
+            Document doc = Jsoup.connect(fullUrl).get();
+            String html = doc.outerHtml();
 
-        // 1. Сохраняем страницу
-        Page page = new Page();
-        page.setSite(site);
-        page.setPath(path);
-        page.setCode(200);
-        page.setContent(html);
-        pageRepository.save(page);
+            Page page = new Page();
+            page.setSite(site);
+            page.setPath(path);
+            page.setCode(200);
+            page.setContent(html);
+            pageRepository.save(page);
 
-        // 2. Лемматизация
-        Map<String, Integer> lemmaMap = lemmaService.lemmatize(text);
+            Map<String, Integer> lemmas = lemmaService.lemmatize(doc.text());
 
-        for (Map.Entry<String, Integer> entry : lemmaMap.entrySet()) {
-            String lemmaText = entry.getKey();
-            int frequency = entry.getValue();
+            for (Map.Entry<String, Integer> entry : lemmas.entrySet()) {
+                String lemmaText = entry.getKey();
+                int count = entry.getValue();
 
-            Lemma lemma = lemmaRepository.findByLemmaAndSite(lemmaText, site)
-                    .orElseGet(() -> {
-                        Lemma newLemma = new Lemma();
-                        newLemma.setSite(site);
-                        newLemma.setLemma(lemmaText);
-                        newLemma.setFrequency(0);
-                        return newLemma;
-                    });
+                Lemma lemma = lemmaRepository.findByLemmaAndSite(lemmaText, site)
+                        .orElseGet(() -> {
+                            Lemma newLemma = new Lemma();
+                            newLemma.setSite(site);
+                            newLemma.setLemma(lemmaText);
+                            newLemma.setFrequency(0);
+                            return newLemma;
+                        });
 
-            lemma.setFrequency(lemma.getFrequency() + 1);
-            lemmaRepository.save(lemma);
+                lemma.setFrequency(lemma.getFrequency() + 1);
+                lemmaRepository.save(lemma);
 
-            Index index = new Index();
-            index.setPage(page);
-            index.setLemma(lemma);
-            index.setRank(frequency);
-            indexRepository.save(index);
+                Index index = new Index();
+                index.setPage(page);
+                index.setLemma(lemma);
+                index.setRank(count);
+                indexRepository.save(index);
+            }
+
+            System.out.println("✅ Страница проиндексирована: " + fullUrl);
+
+        } catch (IOException e) {
+            System.out.println("❌ Ошибка индексации страницы: " + path);
+            e.printStackTrace();
         }
-
-        System.out.println("✅ Индексация завершена: " + fullUrl);
     }
 }

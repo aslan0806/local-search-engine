@@ -5,11 +5,13 @@ import org.springframework.stereotype.Repository;
 import searchengine.model.Page;
 import searchengine.model.SiteEntity;
 
-import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface PageRepository extends JpaRepository<Page, Integer> {
+
     long countBySite(SiteEntity site);
 
-    List<Page> findAllBySite(SiteEntity site); // ✅ добавь этот метод
+    // 🔍 Исправлено: теперь возвращается Optional
+    Optional<Page> findByPathAndSite(String path, SiteEntity site);
 }
