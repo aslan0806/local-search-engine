@@ -1,7 +1,13 @@
 package searchengine.services;
 
-import searchengine.dto.statistics.SearchLogStatistics;
+import searchengine.model.SearchLog;
+
+import java.time.LocalDateTime;
+import java.util.List;
 
 public interface SearchLogService {
-    SearchLogStatistics getStatistics();
+    List<Object[]> getTopQueries();
+    List<Object[]> getTopSites();
+    List<SearchLog> getLastLogs();
+    List<SearchLog> getLogsBetweenDates(LocalDateTime from, LocalDateTime to);
 }
