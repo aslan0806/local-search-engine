@@ -40,7 +40,16 @@ public class SearchLogServiceImpl implements SearchLogService {
 
     @Override
     public byte[] exportLogs(String format) {
-        List<SearchLog> logs = logRepository.findAll();
+        return export(logRepository.findAll(), format);
+    }
+
+    @Override
+    public byte[] exportLogsFiltered(String format, LocalDateTime from, LocalDateTime to) {
+        List<SearchLog> logs = getLogsBetween(from, to);
+        return export(logs, format);
+    }
+
+    private byte[] export(List<SearchLog> logs, String format) {
         try (ByteArrayOutputStream out = new ByteArrayOutputStream();
              OutputStreamWriter writer = new OutputStreamWriter(out, StandardCharsets.UTF_8)) {
 
@@ -67,7 +76,7 @@ public class SearchLogServiceImpl implements SearchLogService {
             return out.toByteArray();
 
         } catch (Exception e) {
-            return ("Error generating export: " + e.getMessage()).getBytes(StandardCharsets.UTF_8);
+            return ("Error exporting logs: " + e.getMessage()).getBytes(StandardCharsets.UTF_8);
         }
     }
 }

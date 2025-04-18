@@ -19,5 +19,5 @@ public interface SearchLogRepository extends JpaRepository<SearchLog, Integer> {
 
     List<SearchLog> findTop10ByOrderByTimestampDesc();
 
-    List<SearchLog> findAllByTimestampBetween(LocalDateTime from, LocalDateTime to); // 🆕 фильтрация по дате
+    List<SearchLog> findAllByTimestampBetween(LocalDateTime from, LocalDateTime to); // 🔍 Фильтрация по дате
 }

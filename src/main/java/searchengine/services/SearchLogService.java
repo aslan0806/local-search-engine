@@ -10,5 +10,6 @@ public interface SearchLogService {
     List<Object[]> getTopQueries();
     List<Object[]> getTopSites();
     List<SearchLog> getLogsBetween(LocalDateTime from, LocalDateTime to);
-    byte[] exportLogs(String format); // 🆕 Добавлен метод экспорта
+    byte[] exportLogs(String format);
+    byte[] exportLogsFiltered(String format, LocalDateTime from, LocalDateTime to); // 🔥
 }
