@@ -1,8 +1,6 @@
 package searchengine.services.impl;
 
 import lombok.RequiredArgsConstructor;
-import org.jsoup.HttpStatusException;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import searchengine.dto.indexing.IndexingResponse;
 import searchengine.model.Page;
@@ -14,7 +12,6 @@ import searchengine.services.IndexingService;
 import searchengine.services.indexing.IndexingTask;
 import searchengine.services.indexing.SiteCrawler;
 
-import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
@@ -36,23 +33,22 @@ public class IndexingServiceImpl implements IndexingService {
         }
 
         isIndexing = true;
-        runAsyncIndexing(); // 💡 Асинхронный запуск
+
+        new Thread(() -> {
+            for (SiteEntity site : siteRepository.findAll()) {
+                if (!isIndexing) break;
+
+                site.setStatus(StatusType.INDEXING);
+                site.setStatusTime(LocalDateTime.now());
+                site.setLastError(null);
+                siteRepository.save(site);
+
+                siteCrawler.crawlSite(site); // ⛏ Рекурсивный обход
+            }
+            isIndexing = false;
+        }).start();
+
         return new IndexingResponse(true, null);
-    }
-
-    @Async
-    public void runAsyncIndexing() {
-        for (SiteEntity site : siteRepository.findAll()) {
-            if (!isIndexing) break;
-
-            site.setStatus(StatusType.INDEXING);
-            site.setStatusTime(LocalDateTime.now());
-            site.setLastError(null);
-            siteRepository.save(site);
-
-            siteCrawler.crawlSite(site); // рекурсивный обход сайта
-        }
-        isIndexing = false;
     }
 
     @Override
@@ -74,20 +70,19 @@ public class IndexingServiceImpl implements IndexingService {
                 .orElse(null);
 
         if (site == null) {
-            return new IndexingResponse(false, "⛔ Страница вне разрешённых сайтов");
+            return new IndexingResponse(false, "⛔ Данная страница находится за пределами разрешённых сайтов");
         }
 
         String path = url.replace(site.getUrl(), "");
+
         Optional<Page> oldPage = pageRepository.findByPathAndSite(path, site);
         oldPage.ifPresent(pageRepository::delete);
 
         try {
             indexingTask.indexPage(site, path);
             return new IndexingResponse(true, null);
-        } catch (HttpStatusException httpEx) {
-            return new IndexingResponse(false, "Ошибка HTTP: " + httpEx.getStatusCode());
-        } catch (IOException ioEx) {
-            return new IndexingResponse(false, "Ошибка загрузки: " + ioEx.getMessage());
+        } catch (Exception e) {
+            return new IndexingResponse(false, "❌ Ошибка индексации страницы: " + e.getMessage());
         }
     }
 }

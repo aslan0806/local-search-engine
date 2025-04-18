@@ -15,35 +15,16 @@ public class IndexingController {
 
     @GetMapping("/startIndexing")
     public ResponseEntity<IndexingResponse> startIndexing() {
-        IndexingResponse response = indexingService.startIndexing();
-        if (!response.isResult()) {
-            return ResponseEntity.badRequest().body(response);
-        }
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(indexingService.startIndexing());
     }
 
     @GetMapping("/stopIndexing")
     public ResponseEntity<IndexingResponse> stopIndexing() {
-        IndexingResponse response = indexingService.stopIndexing();
-        if (!response.isResult()) {
-            return ResponseEntity.badRequest().body(response);
-        }
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(indexingService.stopIndexing());
     }
 
     @PostMapping("/indexPage")
     public ResponseEntity<IndexingResponse> indexPage(@RequestParam String url) {
-        if (url == null || url.isBlank()) {
-            return ResponseEntity.badRequest().body(
-                    new IndexingResponse(false, "⛔ URL не должен быть пустым")
-            );
-        }
-
-        IndexingResponse response = indexingService.indexPage(url);
-        if (!response.isResult()) {
-            return ResponseEntity.badRequest().body(response);
-        }
-
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(indexingService.indexPage(url));
     }
 }
