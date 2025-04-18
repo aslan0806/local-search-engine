@@ -9,5 +9,5 @@ public interface SearchLogService {
     List<Object[]> getTopQueries();
     List<Object[]> getTopSites();
     List<SearchLog> getLastLogs();
-    List<SearchLog> getLogsBetweenDates(LocalDateTime from, LocalDateTime to);
+    List<SearchLog> getLogsBetween(LocalDateTime start, LocalDateTime end);
 }

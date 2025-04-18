@@ -11,32 +11,32 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/logs")
 @RequiredArgsConstructor
+@RequestMapping("/api/logs")
 public class LogController {
 
-    private final SearchLogService logService;
+    private final SearchLogService searchLogService;
+
+    @GetMapping("/recent")
+    public ResponseEntity<List<SearchLog>> getRecentLogs() {
+        return ResponseEntity.ok(searchLogService.getLastLogs());
+    }
 
     @GetMapping("/top-queries")
-    public ResponseEntity<List<Object[]>> topQueries() {
-        return ResponseEntity.ok(logService.getTopQueries());
+    public ResponseEntity<List<Object[]>> getTopQueries() {
+        return ResponseEntity.ok(searchLogService.getTopQueries());
     }
 
     @GetMapping("/top-sites")
-    public ResponseEntity<List<Object[]>> topSites() {
-        return ResponseEntity.ok(logService.getTopSites());
+    public ResponseEntity<List<Object[]>> getTopSites() {
+        return ResponseEntity.ok(searchLogService.getTopSites());
     }
 
-    @GetMapping("/recent")
-    public ResponseEntity<List<SearchLog>> recentLogs() {
-        return ResponseEntity.ok(logService.getLastLogs());
-    }
-
-    @GetMapping("/filter")
-    public ResponseEntity<List<SearchLog>> filterByDate(
+    @GetMapping("/by-date")
+    public ResponseEntity<List<SearchLog>> getLogsBetween(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to
     ) {
-        return ResponseEntity.ok(logService.getLogsBetweenDates(from, to));
+        return ResponseEntity.ok(searchLogService.getLogsBetween(from, to));
     }
 }

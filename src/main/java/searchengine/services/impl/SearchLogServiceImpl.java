@@ -13,25 +13,25 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SearchLogServiceImpl implements SearchLogService {
 
-    private final SearchLogRepository logRepository;
+    private final SearchLogRepository repository;
 
     @Override
     public List<Object[]> getTopQueries() {
-        return logRepository.findTopQueries();
+        return repository.findTopQueries();
     }
 
     @Override
     public List<Object[]> getTopSites() {
-        return logRepository.countBySite();
+        return repository.countBySite();
     }
 
     @Override
     public List<SearchLog> getLastLogs() {
-        return logRepository.findTop10ByOrderByTimestampDesc();
+        return repository.findTop10ByOrderByTimestampDesc();
     }
 
     @Override
-    public List<SearchLog> getLogsBetweenDates(LocalDateTime from, LocalDateTime to) {
-        return logRepository.findAllByTimestampBetween(from, to);
+    public List<SearchLog> getLogsBetween(LocalDateTime start, LocalDateTime end) {
+        return repository.findByDateRange(start, end);
     }
 }
