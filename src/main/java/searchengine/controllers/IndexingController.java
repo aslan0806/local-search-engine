@@ -1,4 +1,3 @@
-// 📦 searchengine.controllers.IndexingController.java
 package searchengine.controllers;
 
 import lombok.RequiredArgsConstructor;
@@ -16,19 +15,16 @@ public class IndexingController {
 
     @GetMapping("/startIndexing")
     public ResponseEntity<IndexingResponse> startIndexing() {
-        IndexingResponse response = indexingService.startIndexing();
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(indexingService.startIndexing());
     }
 
     @GetMapping("/stopIndexing")
     public ResponseEntity<IndexingResponse> stopIndexing() {
-        IndexingResponse response = indexingService.stopIndexing();
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(indexingService.stopIndexing());
     }
 
-    @GetMapping("/indexPage")
+    @PostMapping("/indexPage")
     public ResponseEntity<IndexingResponse> indexPage(@RequestParam String url) {
-        IndexingResponse response = indexingService.indexPage(url);
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(indexingService.indexPage(url));
     }
 }
