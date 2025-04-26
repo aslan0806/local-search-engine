@@ -1,5 +1,6 @@
 package searchengine.services;
 
+import searchengine.dto.statistics.SearchLogStatistics;
 import searchengine.model.SearchLog;
 
 import java.time.LocalDateTime;
@@ -12,4 +13,6 @@ public interface SearchLogService {
     List<SearchLog> getLogsBetween(LocalDateTime from, LocalDateTime to);
     byte[] exportLogs(String format);
     byte[] exportLogsFiltered(String format, LocalDateTime from, LocalDateTime to); // 🔥
+
+    SearchLogStatistics getStatistics();
 }

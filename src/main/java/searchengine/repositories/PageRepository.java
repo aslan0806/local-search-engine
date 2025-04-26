@@ -9,9 +9,5 @@ import java.util.Optional;
 
 @Repository
 public interface PageRepository extends JpaRepository<Page, Integer> {
-
-    long countBySite(SiteEntity site);
-
-    // 🔍 Исправлено: теперь возвращается Optional
     Optional<Page> findByPathAndSite(String path, SiteEntity site);
 }
