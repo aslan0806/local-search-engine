@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 
 @Component
 @RequiredArgsConstructor
-public class StartupSiteInitializer implements CommandLineRunner {
+public class SiteConfigInitializer implements CommandLineRunner {
 
     private final SitesList sitesList;
     private final SiteRepository siteRepository;

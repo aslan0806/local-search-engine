@@ -1,30 +1,36 @@
 package searchengine.model;
 
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import javax.persistence.*;
+import java.util.List;
 
 @Entity
 @Table(name = "page")
 @Getter
 @Setter
+@NoArgsConstructor
 public class Page {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private int id;
+    private Integer id;
 
-    @ManyToOne
-    @JoinColumn(name = "site_id", nullable = false)
-    private SiteEntity site;
+    @Column(nullable = false, columnDefinition = "TEXT")
+    private String content;
 
-    @Column(columnDefinition = "TEXT", nullable = false)
+    @Column(nullable = false)
     private String path;
 
     @Column(nullable = false)
     private int code;
 
-    @Column(columnDefinition = "MEDIUMTEXT", nullable = false)
-    private String content;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "site_id", nullable = false)
+    private SiteEntity site;
+
+    @OneToMany(mappedBy = "page", cascade = CascadeType.ALL)
+    private List<PageIndex> pageIndexes;
 }

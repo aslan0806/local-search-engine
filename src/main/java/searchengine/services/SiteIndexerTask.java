@@ -22,16 +22,25 @@ import java.util.concurrent.RecursiveAction;
 @RequiredArgsConstructor
 public class SiteIndexerTask extends RecursiveAction {
 
-    private final SiteEntity site;
     private final PageRepository pageRepository;
     private final SiteRepository siteRepository;
 
     private final Set<String> visited = new HashSet<>();
-    private final boolean isCancelled = false; // пока без остановки, можно будет доработать
+    private volatile boolean isCancelled = false;
+
+    private SiteEntity site;
+
+    public void setSite(SiteEntity site) {
+        this.site = site;
+    }
 
     @Override
     @Transactional
     protected void compute() {
+        if (site == null) {
+            throw new IllegalStateException("SiteEntity must be set before calling compute()");
+        }
+
         site.setStatus(StatusType.INDEXING);
         site.setStatusTime(LocalDateTime.now());
         siteRepository.save(site);
@@ -69,7 +78,6 @@ public class SiteIndexerTask extends RecursiveAction {
             page.setSite(site);
             pageRepository.save(page);
 
-            // Рекурсивная индексация ссылок
             Elements links = doc.select("a[href]");
             for (var element : links) {
                 String link = element.absUrl("href");

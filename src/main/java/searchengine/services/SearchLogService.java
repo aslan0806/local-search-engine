@@ -12,7 +12,7 @@ public interface SearchLogService {
     List<Object[]> getTopSites();
     List<SearchLog> getLogsBetween(LocalDateTime from, LocalDateTime to);
     byte[] exportLogs(String format);
-    byte[] exportLogsFiltered(String format, LocalDateTime from, LocalDateTime to); // 🔥
+    byte[] exportLogsFiltered(String format, LocalDateTime from, LocalDateTime to);
 
-    SearchLogStatistics getStatistics();
+    SearchLogStatistics getStatistics(); // 🔥 Новый метод для общей статистики
 }

@@ -2,6 +2,7 @@ package searchengine.services.impl;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import searchengine.dto.statistics.SearchLogStatistics;
 import searchengine.model.SearchLog;
 import searchengine.repositories.SearchLogRepository;
 import searchengine.services.SearchLogService;
@@ -47,6 +48,14 @@ public class SearchLogServiceImpl implements SearchLogService {
     public byte[] exportLogsFiltered(String format, LocalDateTime from, LocalDateTime to) {
         List<SearchLog> logs = getLogsBetween(from, to);
         return export(logs, format);
+    }
+
+    @Override
+    public SearchLogStatistics getStatistics() {
+        long totalLogs = logRepository.count();
+        long uniqueQueries = logRepository.countDistinctQueries();
+        long uniqueSites = logRepository.countDistinctSites();
+        return new SearchLogStatistics(totalLogs, uniqueQueries, uniqueSites);
     }
 
     private byte[] export(List<SearchLog> logs, String format) {

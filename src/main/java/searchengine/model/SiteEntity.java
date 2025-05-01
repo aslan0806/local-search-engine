@@ -15,16 +15,16 @@ public class SiteEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private int id;
+    private Integer id;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private StatusType status;
 
-    @Column(columnDefinition = "DATETIME", nullable = false)
+    @Column(name = "status_time", nullable = false, columnDefinition = "DATETIME")
     private LocalDateTime statusTime;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "last_error", columnDefinition = "TEXT")
     private String lastError;
 
     @Column(nullable = false)

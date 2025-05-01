@@ -1,13 +1,12 @@
 package searchengine.dto.statistics;
 
+import lombok.AllArgsConstructor;
 import lombok.Data;
 
-import java.util.List;
-
 @Data
+@AllArgsConstructor
 public class SearchLogStatistics {
-    private int totalSearches;
-    private List<String> topQueries;
-    private List<String> queriesPerSite;
-    private List<SearchLogEntry> lastQueries;
+    private long totalLogs;
+    private long uniqueQueries;
+    private long uniqueSites;
 }

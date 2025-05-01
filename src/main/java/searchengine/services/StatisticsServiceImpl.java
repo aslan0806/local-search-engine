@@ -44,8 +44,11 @@ public class StatisticsServiceImpl implements StatisticsService {
             );
             item.setError(site.getLastError() == null ? "" : site.getLastError());
 
-            int pageCount = (int) pageRepository.countBySite(site);
-            int lemmaCount = (int) lemmaRepository.countBySite(site);
+            Long pageCountLong = pageRepository.countBySite(site);
+            int pageCount = pageCountLong.intValue();
+
+            Long lemmaCountLong = lemmaRepository.countBySite(site);
+            int lemmaCount = lemmaCountLong.intValue();
 
             item.setPages(pageCount);
             item.setLemmas(lemmaCount);
