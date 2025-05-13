@@ -5,7 +5,7 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 import searchengine.config.SitesList;
 import searchengine.model.SiteEntity;
-import searchengine.model.StatusType;
+import searchengine.model.SiteStatus;
 import searchengine.repositories.SiteRepository;
 
 import java.time.LocalDateTime;
@@ -24,7 +24,7 @@ public class StartupSiteInitializer implements CommandLineRunner {
                 SiteEntity entity = new SiteEntity();
                 entity.setUrl(site.getUrl());
                 entity.setName(site.getName());
-                entity.setStatus(StatusType.INDEXING);
+                entity.setStatus(SiteStatus.INDEXING.INDEXING);
                 entity.setStatusTime(LocalDateTime.now());
                 entity.setLastError(null);
                 siteRepository.save(entity);

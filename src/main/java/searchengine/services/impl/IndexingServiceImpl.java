@@ -6,7 +6,7 @@ import org.springframework.stereotype.Service;
 import searchengine.dto.indexing.IndexingResponse;
 import searchengine.model.Page;
 import searchengine.model.SiteEntity;
-import searchengine.model.StatusType;
+import searchengine.model.SiteStatus;
 import searchengine.repositories.PageRepository;
 import searchengine.repositories.SiteRepository;
 import searchengine.services.IndexingService;
@@ -42,7 +42,7 @@ public class IndexingServiceImpl implements IndexingService {
             for (SiteEntity site : siteRepository.findAll()) {
                 if (!isIndexing) break;
 
-                site.setStatus(StatusType.INDEXING);
+                site.setStatus(SiteStatus.INDEXED);
                 site.setStatusTime(LocalDateTime.now());
                 site.setLastError(null);
                 siteRepository.save(site);

@@ -4,7 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.select.Elements;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import searchengine.model.Page;
 import searchengine.model.SiteEntity;
@@ -16,52 +16,39 @@ import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
-import java.util.concurrent.RecursiveAction;
 
-@Component
+@Service
 @RequiredArgsConstructor
-public class SiteIndexerTask extends RecursiveAction {
+public class SiteIndexerService {
 
     private final PageRepository pageRepository;
     private final SiteRepository siteRepository;
 
     private final Set<String> visited = new HashSet<>();
-    private volatile boolean isCancelled = false;
 
-    private SiteEntity site;
-
-    public void setSite(SiteEntity site) {
-        this.site = site;
-    }
-
-    @Override
     @Transactional
-    protected void compute() {
-        if (site == null) {
-            throw new IllegalStateException("SiteEntity must be set before calling compute()");
-        }
-
+    public void indexSite(SiteEntity site) {
         site.setStatus(SiteStatus.INDEXING);
         site.setStatusTime(LocalDateTime.now());
         siteRepository.save(site);
 
         try {
-            indexSite(site.getUrl());
+            crawlSite(site.getUrl(), site);
             site.setStatus(SiteStatus.INDEXED);
         } catch (Exception e) {
             site.setStatus(SiteStatus.FAILED);
-            site.setLastError(e.getMessage());
+            site.setLastError("Ошибка: " + e.getMessage());
         }
 
         site.setStatusTime(LocalDateTime.now());
         siteRepository.save(site);
     }
 
-    private void indexSite(String baseUrl) throws IOException {
-        processPage(baseUrl);
+    private void crawlSite(String baseUrl, SiteEntity site) throws IOException {
+        crawlPage(baseUrl, site);
     }
 
-    private void processPage(String url) {
+    private void crawlPage(String url, SiteEntity site) {
         if (visited.contains(url)) return;
         visited.add(url);
 
@@ -73,21 +60,23 @@ public class SiteIndexerTask extends RecursiveAction {
 
             Page page = new Page();
             page.setCode(200);
-            page.setPath(url.replace(site.getUrl(), ""));
             page.setContent(doc.html());
+            page.setPath(url.replace(site.getUrl(), ""));
             page.setSite(site);
+
+            System.out.println("✔️ Сохраняем страницу: " + page.getPath());
             pageRepository.save(page);
 
             Elements links = doc.select("a[href]");
             for (var element : links) {
                 String link = element.absUrl("href");
                 if (link.startsWith(site.getUrl()) && !visited.contains(link)) {
-                    processPage(link);
+                    crawlPage(link, site);
                 }
             }
 
         } catch (IOException e) {
-            System.out.println("❌ Ошибка при загрузке страницы: " + url);
+            System.out.println("❌ Не удалось загрузить: " + url);
         }
     }
 }

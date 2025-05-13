@@ -1,6 +1,7 @@
 package searchengine.model;
 
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import javax.persistence.*;
@@ -11,6 +12,7 @@ import java.util.List;
 @Table(name = "site")
 @Getter
 @Setter
+@NoArgsConstructor
 public class SiteEntity {
 
     @Id
@@ -19,9 +21,9 @@ public class SiteEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private StatusType status;
+    private SiteStatus status;
 
-    @Column(name = "status_time", nullable = false, columnDefinition = "DATETIME")
+    @Column(name = "status_time", nullable = false)
     private LocalDateTime statusTime;
 
     @Column(name = "last_error", columnDefinition = "TEXT")
@@ -33,9 +35,9 @@ public class SiteEntity {
     @Column(nullable = false)
     private String name;
 
-    @OneToMany(mappedBy = "site", cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "site", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Page> pages;
 
-    @OneToMany(mappedBy = "site", cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "site", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Lemma> lemmas;
 }

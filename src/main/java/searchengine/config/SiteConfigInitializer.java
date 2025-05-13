@@ -4,7 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 import searchengine.model.SiteEntity;
-import searchengine.model.StatusType;
+import searchengine.model.SiteStatus;
 import searchengine.repositories.SiteRepository;
 
 import java.time.LocalDateTime;
@@ -24,7 +24,7 @@ public class SiteConfigInitializer implements CommandLineRunner {
                 SiteEntity site = new SiteEntity();
                 site.setName(siteConfig.getName());
                 site.setUrl(siteConfig.getUrl());
-                site.setStatus(StatusType.INDEXING);
+                site.setStatus(SiteStatus.INDEXED);
                 site.setStatusTime(LocalDateTime.now());
                 site.setLastError(null);
                 siteRepository.save(site);
