@@ -19,6 +19,7 @@ import searchengine.services.LemmaService;
 import searchengine.services.SearchService;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -56,15 +57,23 @@ public class SearchServiceImpl implements SearchService {
             if (lemmas.isEmpty()) continue;
 
             List<Object[]> relevanceData = indexRepository.findPageRelevance(lemmas);
+            if (relevanceData.isEmpty()) continue;
+
+            // Получаем все нужные страницы одним запросом
+            Set<Integer> pageIds = relevanceData.stream()
+                    .map(r -> (Integer) r[0])
+                    .collect(Collectors.toSet());
+
+            Map<Integer, Page> pageMap = pageRepository.findAllById(pageIds).stream()
+                    .collect(Collectors.toMap(Page::getId, p -> p));
 
             for (Object[] row : relevanceData) {
                 Integer pageId = (Integer) row[0];
                 Double rank = (Double) row[1];
 
-                Optional<Page> pageOpt = pageRepository.findById(pageId);
-                if (pageOpt.isEmpty()) continue;
+                Page page = pageMap.get(pageId);
+                if (page == null) continue;
 
-                Page page = pageOpt.get();
                 Document doc = Jsoup.parse(page.getContent());
                 String title = doc.title();
                 String bodyText = Jsoup.clean(doc.body().text(), Safelist.none());
@@ -84,8 +93,10 @@ public class SearchServiceImpl implements SearchService {
         }
 
         // Нормализация релевантности
-        for (SearchResultItem item : results) {
-            item.setRelevance(item.getRelevance() / maxRelevance);
+        if (maxRelevance > 0) {
+            for (SearchResultItem item : results) {
+                item.setRelevance(item.getRelevance() / maxRelevance);
+            }
         }
 
         results.sort(Comparator.comparing(SearchResultItem::getRelevance).reversed());
@@ -97,8 +108,8 @@ public class SearchServiceImpl implements SearchService {
     }
 
     private String makeSnippet(String text, List<String> lemmas) {
+        String lowerText = text.toLowerCase();
         for (String lemma : lemmas) {
-            String lowerText = text.toLowerCase();
             if (lowerText.contains(lemma)) {
                 int idx = lowerText.indexOf(lemma);
                 int start = Math.max(0, idx - 30);

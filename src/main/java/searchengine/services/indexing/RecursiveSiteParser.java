@@ -1,62 +1,66 @@
 package searchengine.services.indexing;
 
-import lombok.RequiredArgsConstructor;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
+import searchengine.model.Page;
 import searchengine.model.SiteEntity;
+import searchengine.repositories.PageRepository;
 
-import java.util.HashSet;
+import java.io.IOException;
+import java.util.List;
 import java.util.Set;
-import java.util.concurrent.RecursiveTask;
+import java.util.concurrent.RecursiveAction;
 
-@RequiredArgsConstructor
-public class RecursiveSiteParser extends RecursiveTask<Void> {
+public class RecursiveSiteParser extends RecursiveAction {
 
     private final String url;
     private final SiteEntity site;
-    private final IndexingTask indexingTask;
     private final Set<String> visited;
+    private final PageRepository pageRepository;
+
+    public RecursiveSiteParser(String url, SiteEntity site, Set<String> visited, PageRepository pageRepository) {
+        this.url = url;
+        this.site = site;
+        this.visited = visited;
+        this.pageRepository = pageRepository;
+    }
 
     @Override
-    protected Void compute() {
+    protected void compute() {
+        if (!visited.add(url)) return;
+
         try {
-            if (visited.contains(url)) return null;
+            Document document = Jsoup.connect(url)
+                    .userAgent("HeliontSearchBot")
+                    .referrer("https://google.com")
+                    .get();
 
-            visited.add(url);
+            Page page = new Page();
+            page.setCode(200);
+            page.setPath(url.replace(site.getUrl(), ""));
+            page.setContent(document.html());
+            page.setSite(site);
+            pageRepository.save(page);
 
-            Document doc = Jsoup.connect(url).get();
+            Elements links = document.select("a[href]");
+            List<RecursiveSiteParser> tasks = links.stream()
+                    .map(el -> el.absUrl("href"))
+                    .filter(this::isValidLink)
+                    .map(link -> new RecursiveSiteParser(link, site, visited, pageRepository))
+                    .toList();
 
-            String path = url.replace(site.getUrl(), "");
-            if (path.isBlank()) path = "/";
+            invokeAll(tasks);
 
-            indexingTask.indexPage(site, path); // 🔁 Индексируем
-
-            Elements links = doc.select("a[href]");
-            Set<RecursiveSiteParser> tasks = new HashSet<>();
-
-            for (Element link : links) {
-                String href = link.absUrl("href");
-
-                // Только внутренние страницы
-                if (href.startsWith(site.getUrl()) && !href.contains("#") && !href.matches(".*\\.(jpg|png|gif|pdf|docx?)$")) {
-                    if (!visited.contains(href)) {
-                        RecursiveSiteParser task = new RecursiveSiteParser(href, site, indexingTask, visited);
-                        task.fork();
-                        tasks.add(task);
-                    }
-                }
-            }
-
-            for (RecursiveSiteParser task : tasks) {
-                task.join();
-            }
-
-        } catch (Exception e) {
-            System.out.println("❌ Ошибка парсинга: " + url + " — " + e.getMessage());
+        } catch (IOException e) {
+            System.err.println("❌ Ошибка загрузки " + url + ": " + e.getMessage());
         }
+    }
 
-        return null;
+    private boolean isValidLink(String link) {
+        return link.startsWith(site.getUrl())
+                && !link.contains("#")
+                && !link.matches(".*\\.(jpg|png|pdf|gif|docx?)$")
+                && !visited.contains(link);
     }
 }

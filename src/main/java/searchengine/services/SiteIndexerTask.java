@@ -1,11 +1,8 @@
 package searchengine.services;
 
-import lombok.RequiredArgsConstructor;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.select.Elements;
-import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 import searchengine.model.Page;
 import searchengine.model.SiteEntity;
 import searchengine.model.SiteStatus;
@@ -14,56 +11,35 @@ import searchengine.repositories.SiteRepository;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
-import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.RecursiveAction;
+import java.util.stream.Collectors;
 
-@Component
-@RequiredArgsConstructor
 public class SiteIndexerTask extends RecursiveAction {
 
+    private final String url;
+    private final SiteEntity site;
+    private final Set<String> visited;
     private final PageRepository pageRepository;
     private final SiteRepository siteRepository;
 
-    private final Set<String> visited = new HashSet<>();
-    private volatile boolean isCancelled = false;
-
-    private SiteEntity site;
-
-    public void setSite(SiteEntity site) {
+    public SiteIndexerTask(String url,
+                           SiteEntity site,
+                           Set<String> visited,
+                           PageRepository pageRepository,
+                           SiteRepository siteRepository) {
+        this.url = url;
         this.site = site;
+        this.visited = visited;
+        this.pageRepository = pageRepository;
+        this.siteRepository = siteRepository;
     }
 
     @Override
-    @Transactional
     protected void compute() {
-        if (site == null) {
-            throw new IllegalStateException("SiteEntity must be set before calling compute()");
-        }
-
-        site.setStatus(SiteStatus.INDEXING);
-        site.setStatusTime(LocalDateTime.now());
-        siteRepository.save(site);
-
-        try {
-            indexSite(site.getUrl());
-            site.setStatus(SiteStatus.INDEXED);
-        } catch (Exception e) {
-            site.setStatus(SiteStatus.FAILED);
-            site.setLastError(e.getMessage());
-        }
-
-        site.setStatusTime(LocalDateTime.now());
-        siteRepository.save(site);
-    }
-
-    private void indexSite(String baseUrl) throws IOException {
-        processPage(baseUrl);
-    }
-
-    private void processPage(String url) {
-        if (visited.contains(url)) return;
-        visited.add(url);
+        if (!visited.add(url)) return;
 
         try {
             Document doc = Jsoup.connect(url)
@@ -79,15 +55,45 @@ public class SiteIndexerTask extends RecursiveAction {
             pageRepository.save(page);
 
             Elements links = doc.select("a[href]");
-            for (var element : links) {
-                String link = element.absUrl("href");
-                if (link.startsWith(site.getUrl()) && !visited.contains(link)) {
-                    processPage(link);
-                }
-            }
+            List<SiteIndexerTask> subTasks = links.stream()
+                    .map(link -> link.absUrl("href"))
+                    .filter(this::isValidLink)
+                    .map(link -> new SiteIndexerTask(link, site, visited, pageRepository, siteRepository))
+                    .collect(Collectors.toList());
+
+            invokeAll(subTasks);
 
         } catch (IOException e) {
-            System.out.println("❌ Ошибка при загрузке страницы: " + url);
+            System.err.println("❌ Ошибка при загрузке страницы: " + url);
         }
+    }
+
+    private boolean isValidLink(String link) {
+        return link.startsWith(site.getUrl())
+                && !link.contains("#")
+                && !link.matches(".*\\.(jpg|png|pdf|docx?|css|js|svg|ico)$")
+                && !visited.contains(link);
+    }
+
+    public static void startIndexing(SiteEntity site,
+                                     PageRepository pageRepository,
+                                     SiteRepository siteRepository) {
+        site.setStatus(SiteStatus.INDEXING);
+        site.setStatusTime(LocalDateTime.now());
+        siteRepository.save(site);
+
+        Set<String> visited = ConcurrentHashMap.newKeySet();
+        SiteIndexerTask rootTask = new SiteIndexerTask(site.getUrl(), site, visited, pageRepository, siteRepository);
+
+        try {
+            new java.util.concurrent.ForkJoinPool().invoke(rootTask);
+            site.setStatus(SiteStatus.INDEXED);
+        } catch (Exception e) {
+            site.setStatus(SiteStatus.FAILED);
+            site.setLastError("Ошибка: " + e.getMessage());
+        }
+
+        site.setStatusTime(LocalDateTime.now());
+        siteRepository.save(site);
     }
 }
