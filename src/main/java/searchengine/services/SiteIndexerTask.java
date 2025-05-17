@@ -1,45 +1,40 @@
 package searchengine.services;
 
+import lombok.RequiredArgsConstructor;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.select.Elements;
+import searchengine.model.Lemma;
 import searchengine.model.Page;
+import searchengine.model.PageIndex;
 import searchengine.model.SiteEntity;
-import searchengine.model.SiteStatus;
+import searchengine.repositories.IndexRepository;
+import searchengine.repositories.LemmaRepository;
 import searchengine.repositories.PageRepository;
-import searchengine.repositories.SiteRepository;
+import searchengine.services.LemmaService;
 
 import java.io.IOException;
-import java.time.LocalDateTime;
-import java.util.List;
+import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.RecursiveAction;
-import java.util.stream.Collectors;
 
+@RequiredArgsConstructor
 public class SiteIndexerTask extends RecursiveAction {
 
     private final String url;
     private final SiteEntity site;
     private final Set<String> visited;
-    private final PageRepository pageRepository;
-    private final SiteRepository siteRepository;
 
-    public SiteIndexerTask(String url,
-                           SiteEntity site,
-                           Set<String> visited,
-                           PageRepository pageRepository,
-                           SiteRepository siteRepository) {
-        this.url = url;
-        this.site = site;
-        this.visited = visited;
-        this.pageRepository = pageRepository;
-        this.siteRepository = siteRepository;
-    }
+    private final PageRepository pageRepository;
+    private final LemmaRepository lemmaRepository;
+    private final IndexRepository indexRepository;
+    private final LemmaService lemmaService;
 
     @Override
     protected void compute() {
-        if (!visited.add(url)) return;
+        if (visited.contains(url)) return;
+        visited.add(url);
 
         try {
             Document doc = Jsoup.connect(url)
@@ -54,46 +49,42 @@ public class SiteIndexerTask extends RecursiveAction {
             page.setSite(site);
             pageRepository.save(page);
 
-            Elements links = doc.select("a[href]");
-            List<SiteIndexerTask> subTasks = links.stream()
-                    .map(link -> link.absUrl("href"))
-                    .filter(this::isValidLink)
-                    .map(link -> new SiteIndexerTask(link, site, visited, pageRepository, siteRepository))
-                    .collect(Collectors.toList());
+            Map<String, Integer> lemmas = lemmaService.lemmatize(doc.text());
+            for (Map.Entry<String, Integer> entry : lemmas.entrySet()) {
+                String lemmaStr = entry.getKey();
+                int count = entry.getValue();
 
-            invokeAll(subTasks);
+                Lemma lemma = lemmaRepository.findByLemmaAndSite(lemmaStr, site)
+                        .orElseGet(() -> {
+                            Lemma newLemma = new Lemma();
+                            newLemma.setLemma(lemmaStr);
+                            newLemma.setSite(site);
+                            newLemma.setFrequency(0);
+                            return newLemma;
+                        });
+
+                lemma.setFrequency(lemma.getFrequency() + 1);
+                lemmaRepository.save(lemma);
+
+                PageIndex index = new PageIndex();
+                index.setPage(page);
+                index.setLemma(lemma);
+                index.setRank(count);
+                indexRepository.save(index);
+            }
+
+            Elements links = doc.select("a[href]");
+            invokeAll(
+                    links.stream()
+                            .map(link -> link.absUrl("href"))
+                            .filter(link -> link.startsWith(site.getUrl()))
+                            .filter(link -> !visited.contains(link))
+                            .map(link -> new SiteIndexerTask(link, site, visited, pageRepository, lemmaRepository, indexRepository, lemmaService))
+                            .toList()
+            );
 
         } catch (IOException e) {
-            System.err.println("❌ Ошибка при загрузке страницы: " + url);
+            System.out.println("❌ Ошибка при загрузке страницы: " + url);
         }
-    }
-
-    private boolean isValidLink(String link) {
-        return link.startsWith(site.getUrl())
-                && !link.contains("#")
-                && !link.matches(".*\\.(jpg|png|pdf|docx?|css|js|svg|ico)$")
-                && !visited.contains(link);
-    }
-
-    public static void startIndexing(SiteEntity site,
-                                     PageRepository pageRepository,
-                                     SiteRepository siteRepository) {
-        site.setStatus(SiteStatus.INDEXING);
-        site.setStatusTime(LocalDateTime.now());
-        siteRepository.save(site);
-
-        Set<String> visited = ConcurrentHashMap.newKeySet();
-        SiteIndexerTask rootTask = new SiteIndexerTask(site.getUrl(), site, visited, pageRepository, siteRepository);
-
-        try {
-            new java.util.concurrent.ForkJoinPool().invoke(rootTask);
-            site.setStatus(SiteStatus.INDEXED);
-        } catch (Exception e) {
-            site.setStatus(SiteStatus.FAILED);
-            site.setLastError("Ошибка: " + e.getMessage());
-        }
-
-        site.setStatusTime(LocalDateTime.now());
-        siteRepository.save(site);
     }
 }
